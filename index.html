@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>姿勢カメラ V13</title>
+<title>姿勢カメラ V14</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -42,7 +42,7 @@
 <body>
 
 <main id="page-top">
-  <h1>姿勢カメラ V13</h1>
+  <h1>姿勢カメラ V14</h1>
   <button id="btn-perms" class="primary">カメラとセンサーの権限を取る</button>
   <p class="muted">カメラ：<span id="perm-cam">未取得</span>　センサー：<span id="perm-sensor">未取得</span></p>
   <p id="cam-err" class="err"></p>
@@ -85,6 +85,7 @@
       <button id="btn-cam-skip" class="sub">撮らない</button>
       <button id="btn-cam-finish" class="sub">ここまでで保存</button>
       <button id="btn-cam-flip" class="sub">カメラ切替</button>
+      <button id="btn-cam-grid" class="sub">格子</button>
     </div>
   </div>
 </div>
@@ -93,7 +94,7 @@
 
 <script>
 "use strict";
-const APP_VERSION = 13;
+const APP_VERSION = 14;
 const DIRS = ["front", "right", "left", "back"];
 const DIR_JA = { front: "正面", right: "右側面", left: "左側面", back: "背面" };
 const $ = (id) => document.getElementById(id);
@@ -166,7 +167,17 @@ function onOrient(e) {
 function tiltDeg(o) {
   if (o.beta == null || o.gamma == null) return null;
   const b = o.beta * Math.PI / 180, g = o.gamma * Math.PI / 180;
-  return Math.round(Math.atan2(-Math.cos(b) * Math.sin(g), Math.sin(b)) * 180 / Math.PI * 10) / 10;
+  const rollScreen = Math.atan2(-Math.cos(b) * Math.sin(g), Math.sin(b)) * 180 / Math.PI;
+  // スマホを横向きで構えた時、画面の向きの分だけズレる。縦向きで構えた前提で計算していたのが
+  // 「格子は垂直なのに写真が斜め」の原因（V14で画面の向きを差し引く）。
+  const so = (typeof screen !== "undefined" && screen.orientation && typeof screen.orientation.angle === "number")
+    ? screen.orientation.angle : (typeof window.orientation === "number" ? window.orientation : 0);
+  let r = rollScreen - so;
+  r = ((r + 540) % 360) - 180;
+  // 写真の横方向に対して-90〜90に丸める（±180付近は上下逆さま扱いで0側に寄せる）
+  if (r > 90) r -= 180;
+  if (r < -90) r += 180;
+  return Math.round(r * 10) / 10;
 }
 function pitchDeg(o) {
   if (o.beta == null) return null;
@@ -433,7 +444,7 @@ async function extractContour(canvas) {
 const S = {
   mode: null, patient: "", baseSetId: null, basePhotos: {},
   step: 0, shots: [], stream: null, video: null, raf: 0,
-  landmarks: null, facing: "environment", busy: false
+  landmarks: null, facing: "environment", busy: false, gridMode: 0
 };
 function coverTransform(vw, vh, cw, ch) {
   const s = Math.max(cw / vw, ch / vh);
@@ -481,6 +492,24 @@ function drawLoop() {
   const { s, ox, oy } = coverTransform(vw, vh, cw, ch);
   ctx.fillStyle = "#000"; ctx.fillRect(0, 0, cw, ch);
   ctx.drawImage(v, ox, oy, vw * s, vh * s);
+
+  // 画角を決めるための格子（撮影画面に重ねるだけ。写真には焼き込まない）。AI不要で常に出る。
+  if (S.gridMode > 0) {
+    const divs = S.gridMode === 1 ? 12 : 6;
+    ctx.strokeStyle = "rgba(255,255,255,0.30)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 1; i < divs; i++) {
+      const gx = Math.round(cw * i / divs) + 0.5, gy = Math.round(ch * i / divs) + 0.5;
+      ctx.moveTo(gx, 0); ctx.lineTo(gx, ch);
+      ctx.moveTo(0, gy); ctx.lineTo(cw, gy);
+    }
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(255,213,74,0.65)";
+    ctx.beginPath();
+    ctx.moveTo(Math.round(cw / 2) + 0.5, 0); ctx.lineTo(Math.round(cw / 2) + 0.5, ch);
+    ctx.stroke();
+  }
 
   if (pose) {
     try {
@@ -769,6 +798,10 @@ $("shutter").onclick = takePhoto;
 $("btn-cam-cancel").onclick = cancelShoot;
 $("btn-cam-skip").onclick = () => { if (!S.busy) nextStep(); };
 $("btn-cam-finish").onclick = () => { if (!S.busy) finishShoot(); };
+$("btn-cam-grid").onclick = () => {
+  S.gridMode = (S.gridMode + 1) % 3;
+  $("btn-cam-grid").textContent = S.gridMode === 1 ? "格子（細）" : S.gridMode === 2 ? "格子（粗）" : "格子";
+};
 $("btn-cam-flip").onclick = async () => {
   S.facing = S.facing === "environment" ? "user" : "environment";
   stopCamera();
