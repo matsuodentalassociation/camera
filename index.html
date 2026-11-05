@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>姿勢カメラ V8</title>
+<title>姿勢カメラ V9</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -40,11 +40,11 @@
 <body>
 
 <main id="page-top">
-  <h1>姿勢カメラ V8</h1>
+  <h1>姿勢カメラ V9</h1>
   <button id="btn-perms" class="primary">カメラとセンサーの権限を取る</button>
   <p class="muted">カメラ：<span id="perm-cam">未取得</span>　センサー：<span id="perm-sensor">未取得</span></p>
   <h2>患者の登録</h2>
-  <p class="muted">現在の患者：<b id="current-patient">未登録</b></p>
+
   <button id="btn-ocr" disabled>カルテを撮って読み取る</button>
   <input id="reg-name" type="text" placeholder="患者名">
   <input id="reg-chart" type="text" placeholder="カルテ番号">
@@ -89,7 +89,7 @@
 
 <script>
 "use strict";
-const APP_VERSION = 8;
+const APP_VERSION = 9;
 const DIRS = ["front", "right", "left", "back"];
 const DIR_JA = { front: "正面", right: "右側面", left: "左側面", back: "背面" };
 const $ = (id) => document.getElementById(id);
@@ -230,6 +230,7 @@ if (typeof DeviceOrientationEvent === "undefined" || typeof DeviceOrientationEve
 
 /* ===== 患者登録（OCR＋手入力） ===== */
 let currentPatient = null;
+let patientFieldSyncId = null;
 async function renderPatients() {
   const ps = (await DB.all("patients")).sort((a, b) => b.createdAt - a.createdAt);
   const box = $("patient-list"); box.innerHTML = "";
@@ -237,11 +238,11 @@ async function renderPatients() {
     const row = document.createElement("div");
     row.style.display = "flex"; row.style.gap = "8px"; row.style.margin = "6px 0";
     const b = document.createElement("button");
-    b.className = "sub"; b.style.flex = "1";
+    b.className = "sub"; b.style.flex = "1 1 auto"; b.style.minWidth = "0";
     b.textContent = (currentPatient && currentPatient.id === p.id ? "● " : "") + p.name + "（No." + p.chartNo + "）";
     b.onclick = async () => { currentPatient = p; localStorage.setItem("pc-patient", p.id); await renderPatients(); };
     const del = document.createElement("button");
-    del.className = "sub"; del.textContent = "削除";
+    del.className = "sub"; del.textContent = "削除"; del.style.flex = "0 0 auto"; del.style.width = "auto";
     del.onclick = async () => {
       if (!confirm(p.name + "（No." + p.chartNo + "）を削除しますか？")) return;
       await DB.del("patients", p.id);
@@ -257,7 +258,17 @@ async function renderPatients() {
   updatePatientUI();
 }
 function updatePatientUI() {
-  $("current-patient").textContent = currentPatient ? currentPatient.name + "（No." + currentPatient.chartNo + "）" : "未登録";
+  // 患者の表示は入力欄そのものに統一する（別の場所に書かない）。
+  // 選択が変わった時だけ欄へ反映する。手入力の途中では触らない。
+  if (currentPatient && currentPatient.id !== patientFieldSyncId) {
+    $("reg-name").value = currentPatient.name;
+    $("reg-chart").value = currentPatient.chartNo || "";
+    patientFieldSyncId = currentPatient.id;
+  } else if (!currentPatient && patientFieldSyncId) {
+    $("reg-name").value = "";
+    $("reg-chart").value = "";
+    patientFieldSyncId = null;
+  }
   updatePermUI();
   renderPatientsSelection();
 }
@@ -271,12 +282,11 @@ async function registerPatient() {
   const all = await DB.all("patients");
   let p = all.find((x) => x.chartNo === chartNo);
   if (p) { p.name = name; }
+  else if (currentPatient) { p = currentPatient; p.name = name; p.chartNo = chartNo; }
   else { p = { id: uid(), name, chartNo, createdAt: Date.now() }; }
   await DB.put("patients", p);
   currentPatient = p;
   localStorage.setItem("pc-patient", p.id);
-  $("reg-name").value = "";
-  $("reg-chart").value = "";
   await renderPatients();
   toast("登録しました");
 }
