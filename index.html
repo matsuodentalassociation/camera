@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>姿勢カメラ V6</title>
+<title>姿勢カメラ V7</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -40,7 +40,7 @@
 <body>
 
 <main id="page-top">
-  <h1>姿勢カメラ V6</h1>
+  <h1>姿勢カメラ V7</h1>
   <button id="btn-perms" class="primary">カメラとセンサーの権限を取る</button>
   <p class="muted">カメラ：<span id="perm-cam">未取得</span>　センサー：<span id="perm-sensor">未取得</span></p>
   <h2>患者の登録</h2>
@@ -48,7 +48,6 @@
   <button id="btn-ocr" disabled>カルテを撮って読み取る</button>
   <input id="reg-name" type="text" placeholder="患者名">
   <input id="reg-chart" type="text" placeholder="カルテ番号">
-  <button id="btn-register">この内容で登録</button>
   <div id="patient-list"></div>
   <button id="btn-start-before" class="primary" disabled>ビフォーを撮る</button>
   <div id="after-area"></div>
@@ -90,7 +89,7 @@
 
 <script>
 "use strict";
-const APP_VERSION = 6;
+const APP_VERSION = 7;
 const DIRS = ["front", "right", "left", "back"];
 const DIR_JA = { front: "正面", right: "右側面", left: "左側面", back: "背面" };
 const $ = (id) => document.getElementById(id);
@@ -235,11 +234,25 @@ async function renderPatients() {
   const ps = (await DB.all("patients")).sort((a, b) => b.createdAt - a.createdAt);
   const box = $("patient-list"); box.innerHTML = "";
   for (const p of ps) {
+    const row = document.createElement("div");
+    row.style.display = "flex"; row.style.gap = "8px"; row.style.margin = "6px 0";
     const b = document.createElement("button");
-    b.className = "sub";
+    b.className = "sub"; b.style.flex = "1";
     b.textContent = (currentPatient && currentPatient.id === p.id ? "● " : "") + p.name + "（No." + p.chartNo + "）";
     b.onclick = async () => { currentPatient = p; localStorage.setItem("pc-patient", p.id); await renderPatients(); };
-    box.appendChild(b);
+    const del = document.createElement("button");
+    del.className = "sub"; del.textContent = "削除";
+    del.onclick = async () => {
+      if (!confirm(p.name + "（No." + p.chartNo + "）を削除しますか？")) return;
+      await DB.del("patients", p.id);
+      if (currentPatient && currentPatient.id === p.id) {
+        currentPatient = null;
+        localStorage.removeItem("pc-patient");
+      }
+      await renderPatients();
+    };
+    row.appendChild(b); row.appendChild(del);
+    box.appendChild(row);
   }
   updatePatientUI();
 }
@@ -262,11 +275,13 @@ async function registerPatient() {
   await DB.put("patients", p);
   currentPatient = p;
   localStorage.setItem("pc-patient", p.id);
+  $("reg-name").value = "";
+  $("reg-chart").value = "";
   await renderPatients();
   toast("登録しました");
 }
 
-/* カルテ撮影→OCR。読み取りは端末内（Tesseract）で行い、欄に転記する。登録は人の確認後。 */
+/* カルテ撮影→OCR。読み取りは端末内（Tesseract）で行う。名前と番号が揃えば、そのまま登録する（V7で登録ボタンを廃止）。 */
 let tesseractLoading = null;
 function loadTesseract() {
   if (window.Tesseract) return Promise.resolve();
@@ -307,7 +322,11 @@ async function runOcr(canvas) {
     const r = parseChartText(data.text || "");
     if (r.name) $("reg-name").value = r.name;
     if (r.chartNo) $("reg-chart").value = r.chartNo;
-    toast(r.name || r.chartNo ? "読み取りました。確認して登録してください" : "読み取れませんでした");
+    if (r.name && r.chartNo) {
+      await registerPatient();
+    } else {
+      toast(r.name || r.chartNo ? "一部だけ読み取りました。足りない欄を入れてください" : "読み取れませんでした");
+    }
   } catch (e) {
     console.warn(e);
     toast("読み取れませんでした");
@@ -662,7 +681,6 @@ async function openDetail(setId) {
 
 /* ===== 配線 ===== */
 $("btn-perms").onclick = takePerms;
-$("btn-register").onclick = registerPatient;
 $("btn-ocr").onclick = async () => {
   if (!PERMS.cam) { toast("先に権限を取ってください"); return; }
   S.mode = "ocr"; S.step = 0; S.shots = [];
@@ -671,7 +689,12 @@ $("btn-ocr").onclick = async () => {
   updateCamDir();
   try { await startCamera(); } catch (e) { toast("カメラを開けませんでした"); cancelShoot(); }
 };
-$("btn-start-before").onclick = () => beginShoot("before", null, currentPatient);
+$("btn-start-before").onclick = async () => {
+  const nm = $("reg-name").value.trim(), cn = $("reg-chart").value.trim();
+  if (nm && cn) await registerPatient();
+  if (!currentPatient) { toast("患者が決まっていません"); return; }
+  beginShoot("before", null, currentPatient);
+};
 $("shutter").onclick = takePhoto;
 $("btn-cam-cancel").onclick = cancelShoot;
 $("btn-cam-skip").onclick = () => { if (!S.busy) nextStep(); };
