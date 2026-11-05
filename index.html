@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>姿勢カメラ V5</title>
+<title>姿勢カメラ V6</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -40,7 +40,7 @@
 <body>
 
 <main id="page-top">
-  <h1>姿勢カメラ V5</h1>
+  <h1>姿勢カメラ V6</h1>
   <button id="btn-perms" class="primary">カメラとセンサーの権限を取る</button>
   <p class="muted">カメラ：<span id="perm-cam">未取得</span>　センサー：<span id="perm-sensor">未取得</span></p>
   <h2>患者の登録</h2>
@@ -55,6 +55,9 @@
   <h2>記録</h2>
   <div id="set-list"></div>
   <p id="list-empty" class="muted">まだありません</p>
+  <h2>アプリの更新</h2>
+  <button id="btn-update" class="sub">最新版に変更（キャッシュを避けて再読み込み）</button>
+  <p id="upd-msg" class="muted"></p>
 </main>
 
 <main id="page-detail" hidden>
@@ -87,7 +90,7 @@
 
 <script>
 "use strict";
-const APP_VERSION = 5;
+const APP_VERSION = 6;
 const DIRS = ["front", "right", "left", "back"];
 const DIR_JA = { front: "正面", right: "右側面", left: "左側面", back: "背面" };
 const $ = (id) => document.getElementById(id);
@@ -571,16 +574,26 @@ async function renderList() {
   }
 }
 function correctedCanvas(img, tilt) {
-  const c = document.createElement("canvas");
-  const ang = -(tilt || 0) * Math.PI / 180;
   const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
-  const cos = Math.abs(Math.cos(ang)), sin = Math.abs(Math.sin(ang));
-  c.width = Math.round(w * cos + h * sin); c.height = Math.round(w * sin + h * cos);
-  const ctx = c.getContext("2d");
-  ctx.fillStyle = "#000"; ctx.fillRect(0, 0, c.width, c.height);
-  ctx.translate(c.width / 2, c.height / 2); ctx.rotate(ang);
-  ctx.drawImage(img, -w / 2, -h / 2);
-  return c;
+  const ang = -(tilt || 0) * Math.PI / 180;
+  const t = Math.abs(ang), cos = Math.cos(t), sin = Math.sin(t);
+  const rot = document.createElement("canvas");
+  rot.width = Math.round(w * cos + h * sin); rot.height = Math.round(w * sin + h * cos);
+  const rctx = rot.getContext("2d");
+  rctx.translate(rot.width / 2, rot.height / 2); rctx.rotate(ang);
+  rctx.drawImage(img, -w / 2, -h / 2);
+  // 回転で生じる余白（隅の欠け）を切り落とし、中に収まる最大の長方形に整える
+  let cw = w, ch = h;
+  const det = cos * cos - sin * sin;
+  if (sin > 0.0001 && det > 0.2) {
+    const x = ((w / 2) * cos - (h / 2) * sin) / det;
+    const y = ((h / 2) * cos - (w / 2) * sin) / det;
+    if (x > 10 && y > 10) { cw = Math.floor(2 * x); ch = Math.floor(2 * y); }
+  }
+  const out = document.createElement("canvas");
+  out.width = cw; out.height = ch;
+  out.getContext("2d").drawImage(rot, (rot.width - cw) / 2, (rot.height - ch) / 2, cw, ch, 0, 0, cw, ch);
+  return out;
 }
 function downloadBlob(blob, name) {
   const a = document.createElement("a");
@@ -686,6 +699,135 @@ $("btn-delete-set").onclick = async () => {
   await renderList();
 };
 
+/* ===== 更新確認（キャッシュを避けて最新版を開く。睡眠アプリと同じ仕組み） ===== */
+const UPD_REPO = "matsuodentalassociation/camera";
+const UPD_BRANCH = "main";
+const UPD_FILE = "index.html";
+const UPD_PAGES = "https://matsuodentalassociation.github.io/camera/";
+const UPD_TARGET_KEY = "posturecam-update-target";
+const UPDATE_EVERY_MS = 10 * 60 * 1000;
+const UPD_TIMEOUT_MS = 10000;
+const updState = { checking: false, applying: false, latest: null, sha: "", error: "", checkedAt: 0, userInitiated: false };
+function updMsg(text) { const el = $("upd-msg"); if (el) el.textContent = text; }
+function parseVersion(text) {
+  const m = String(text || "").match(/const\s+APP_VERSION\s*=\s*(\d+)/);
+  return m ? Number(m[1]) : null;
+}
+async function updFetch(url, timeoutMs) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), timeoutMs || UPD_TIMEOUT_MS);
+  try { return await fetch(url, { cache: "no-store", signal: ctl.signal }); }
+  finally { clearTimeout(timer); }
+}
+async function fetchLatestCommit() {
+  const api = "https://api.github.com/repos/" + UPD_REPO + "/commits/" + UPD_BRANCH + "?_=" + Date.now();
+  const res = await updFetch(api);
+  if (!res.ok) throw new Error("GitHub API " + res.status);
+  const data = await res.json();
+  if (!data || !data.sha) throw new Error("最新コミットを取得できませんでした");
+  return data;
+}
+async function fetchCommittedFile(sha) {
+  const url = "https://raw.githubusercontent.com/" + UPD_REPO + "/" + sha + "/" + UPD_FILE;
+  const res = await updFetch(url);
+  if (!res.ok) throw new Error("最新版ファイルを取得できませんでした");
+  return res.text();
+}
+async function fetchServedVersion() {
+  const url = UPD_PAGES + "?updcheck=" + Date.now();
+  const res = await updFetch(url, 15000);
+  if (!res.ok) throw new Error("公開ページを確認できませんでした");
+  return parseVersion(await res.text());
+}
+function renderUpdate() {
+  const btn = $("btn-update");
+  if (!btn) return;
+  if (updState.applying) {
+    btn.disabled = true;
+    btn.textContent = "最新版へ切り替え中…";
+    updMsg("キャッシュを消して、最新版を開き直しています。");
+    return;
+  }
+  btn.disabled = false;
+  if (updState.latest && updState.latest > APP_VERSION) {
+    btn.textContent = "最新版 V" + updState.latest + " に変更（キャッシュを避けて再読み込み）";
+    updMsg("新しい版 V" + updState.latest + " があります。今は V" + APP_VERSION + " です。");
+  } else {
+    btn.textContent = "最新版に変更（キャッシュを避けて再読み込み）";
+    if (updState.error) updMsg(updState.error);
+    else if (updState.checkedAt) updMsg("最新版を確認済みです（現在 V" + APP_VERSION + "）。");
+    else updMsg("公開ページの最新版を確認します。");
+  }
+}
+async function checkUpdate(userInitiated) {
+  if (updState.checking || updState.applying) return;
+  updState.checking = true;
+  updState.userInitiated = !!userInitiated;
+  updState.error = "";
+  if (userInitiated) updMsg("最新版を確認しています…");
+  try {
+    const commit = await fetchLatestCommit();
+    const latest = parseVersion(await fetchCommittedFile(commit.sha));
+    if (!latest) throw new Error("最新版の番号を確認できませんでした");
+    updState.latest = latest;
+    updState.sha = commit.sha;
+    updState.checkedAt = Date.now();
+    if (latest > APP_VERSION) {
+      if (userInitiated) await applyLatest();
+    } else if (userInitiated) {
+      updMsg("いま開いているのが最新版です（V" + APP_VERSION + "）。");
+    }
+  } catch (e) {
+    console.error(e);
+    updState.error = userInitiated ? "最新版を確認できませんでした。通信状態を確認して、もう一度押してください。" : "";
+  } finally {
+    updState.checking = false;
+    if (!updState.applying) renderUpdate();
+  }
+}
+async function applyLatest() {
+  if (updState.applying) return;
+  if (S.stream || S.busy) { updMsg("撮影中は切り替えられません。撮影を終えてから押してください。"); return; }
+  updState.applying = true;
+  renderUpdate();
+  try {
+    const latest = updState.latest;
+    const sha = updState.sha || (await fetchLatestCommit()).sha;
+    let served = null;
+    for (let i = 0; i < 6; i++) {
+      served = await fetchServedVersion().catch(() => null);
+      if (served && served >= latest) break;
+      if (i < 5) await new Promise((r) => setTimeout(r, 5000));
+    }
+    if (!served || served < latest) {
+      updState.applying = false;
+      updMsg("新しい版はまだ公開ページへ反映されていません。少し待ってから、もう一度押してください。");
+      renderUpdate();
+      return;
+    }
+    try { sessionStorage.setItem(UPD_TARGET_KEY, JSON.stringify({ version: latest, sha, at: Date.now() })); } catch (e) {}
+    if ("caches" in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((k) => caches.delete(k)));
+    }
+    if ("serviceWorker" in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map((r) => r.unregister()));
+    }
+    const url = new URL(location.href);
+    url.searchParams.set("v", String(latest));
+    url.searchParams.set("c", String(sha).slice(0, 12));
+    url.searchParams.set("t", String(Date.now()));
+    location.replace(url.toString());
+  } catch (e) {
+    console.error(e);
+    updState.applying = false;
+    updMsg("切り替えに失敗しました。もう一度押してください。");
+    renderUpdate();
+  }
+}
+$("btn-update").onclick = () => { checkUpdate(true); };
+
 (async () => {
   await DB.open();
   const savedId = localStorage.getItem("pc-patient");
@@ -693,6 +835,9 @@ $("btn-delete-set").onclick = async () => {
   await renderPatients();
   updatePermUI();
   await renderList();
+  renderUpdate();
+  checkUpdate(false);
+  setInterval(() => { checkUpdate(false); }, UPDATE_EVERY_MS);
 })();
 </script>
 </body>
