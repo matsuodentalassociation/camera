@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>姿勢カメラ V9</title>
+<title>姿勢カメラ V10</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -19,6 +19,7 @@
   button.danger { background: #7a2020; border-color: #7a2020; color: #fff; }
   button:disabled { opacity: .45; }
   input[type="text"] { width: 100%; padding: 12px; font-size: 16px; border-radius: 8px; border: 1px solid #3a4754; background: #0d1116; color: #eef2f5; margin: 6px 0; }
+  .fld-label { display: block; font-size: 12px; color: #9fb0bd; margin: 10px 0 0; }
   .tag { display: inline-block; padding: 2px 10px; border-radius: 999px; background: #2c3844; font-size: 12px; }
   .set-item { text-align: left; }
   #cam-wrap { position: fixed; inset: 0; background: #000; z-index: 20; }
@@ -40,23 +41,22 @@
 <body>
 
 <main id="page-top">
-  <h1>姿勢カメラ V9</h1>
+  <h1>姿勢カメラ V10</h1>
   <button id="btn-perms" class="primary">カメラとセンサーの権限を取る</button>
   <p class="muted">カメラ：<span id="perm-cam">未取得</span>　センサー：<span id="perm-sensor">未取得</span></p>
   <h2>患者の登録</h2>
 
   <button id="btn-ocr" disabled>カルテを撮って読み取る</button>
-  <input id="reg-name" type="text" placeholder="患者名">
-  <input id="reg-chart" type="text" placeholder="カルテ番号">
+  <label class="fld-label" for="reg-name">患者名</label>
+  <input id="reg-name" type="text" autocomplete="off">
+  <label class="fld-label" for="reg-chart">カルテ番号</label>
+  <input id="reg-chart" type="text" inputmode="numeric" autocomplete="off">
   <div id="patient-list"></div>
   <button id="btn-start-before" class="primary" disabled>ビフォーを撮る</button>
   <div id="after-area"></div>
   <h2>記録</h2>
   <div id="set-list"></div>
   <p id="list-empty" class="muted">まだありません</p>
-  <h2>アプリの更新</h2>
-  <button id="btn-update" class="sub">最新版に変更（キャッシュを避けて再読み込み）</button>
-  <p id="upd-msg" class="muted"></p>
 </main>
 
 <main id="page-detail" hidden>
@@ -89,7 +89,7 @@
 
 <script>
 "use strict";
-const APP_VERSION = 9;
+const APP_VERSION = 10;
 const DIRS = ["front", "right", "left", "back"];
 const DIR_JA = { front: "正面", right: "右側面", left: "左側面", back: "背面" };
 const $ = (id) => document.getElementById(id);
@@ -288,6 +288,7 @@ async function registerPatient() {
   currentPatient = p;
   localStorage.setItem("pc-patient", p.id);
   await renderPatients();
+  if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
   toast("登録しました");
 }
 
@@ -823,9 +824,11 @@ async function checkUpdate(userInitiated) {
     if (!latest) throw new Error("最新版の番号を確認できませんでした");
     updState.latest = latest;
     updState.sha = commit.sha;
+    const firstCheck = !updState.checkedAt;
     updState.checkedAt = Date.now();
     if (latest > APP_VERSION) {
-      if (userInitiated) await applyLatest();
+      // 更新の表示は出さない（秀司の指示）。開いた直後の確認で新しい版があれば、黙って切り替える。
+      if (userInitiated || firstCheck) await applyLatest();
     } else if (userInitiated) {
       updMsg("いま開いているのが最新版です（V" + APP_VERSION + "）。");
     }
@@ -878,7 +881,8 @@ async function applyLatest() {
     renderUpdate();
   }
 }
-$("btn-update").onclick = () => { checkUpdate(true); };
+const updBtn = $("btn-update");
+if (updBtn) updBtn.onclick = () => { checkUpdate(true); };
 
 (async () => {
   await DB.open();
