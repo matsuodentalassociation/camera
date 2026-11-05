@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>姿勢カメラ V11</title>
+<title>姿勢カメラ V12</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -42,7 +42,7 @@
 <body>
 
 <main id="page-top">
-  <h1>姿勢カメラ V11</h1>
+  <h1>姿勢カメラ V12</h1>
   <button id="btn-perms" class="primary">カメラとセンサーの権限を取る</button>
   <p class="muted">カメラ：<span id="perm-cam">未取得</span>　センサー：<span id="perm-sensor">未取得</span></p>
   <p id="cam-err" class="err"></p>
@@ -91,7 +91,7 @@
 
 <script>
 "use strict";
-const APP_VERSION = 11;
+const APP_VERSION = 12;
 const DIRS = ["front", "right", "left", "back"];
 const DIR_JA = { front: "正面", right: "右側面", left: "左側面", back: "背面" };
 const $ = (id) => document.getElementById(id);
@@ -195,7 +195,8 @@ function updatePermUI() {
   $("perm-cam").textContent = PERMS.cam ? "OK" : "未取得";
   $("perm-sensor").textContent = PERMS.sensor ? "OK" : "未取得";
   $("btn-ocr").disabled = !PERMS.cam;
-  $("btn-start-before").disabled = !(PERMS.cam && currentPatient);
+  // 直接書き込んだ場合、登録は「ビフォーを撮る」を押した時に行う。登録済みでないと押せない作りは行き止まりになる（V12で修正）。
+  $("btn-start-before").disabled = !PERMS.cam;
   $("btn-perms").disabled = PERMS.cam && PERMS.sensor;
 }
 async function takePerms() {
@@ -273,6 +274,12 @@ function updatePatientUI() {
   }
   updatePermUI();
   renderPatientsSelection();
+  syncOcrBtn();
+}
+// 名前とカルテ番号が両方入っていたら、読み取りボタンは消す（秀司の指示、V12）。
+function syncOcrBtn() {
+  const filled = $("reg-name").value.trim() && $("reg-chart").value.trim();
+  $("btn-ocr").hidden = !!filled;
 }
 function renderPatientsSelection() {
   // 選択中マークだけ付け直す（再描画は renderPatients が担う）
@@ -727,6 +734,8 @@ async function openDetail(setId) {
 
 /* ===== 配線 ===== */
 $("btn-perms").onclick = takePerms;
+$("reg-name").addEventListener("input", syncOcrBtn);
+$("reg-chart").addEventListener("input", syncOcrBtn);
 $("btn-ocr").onclick = async () => {
   if (!PERMS.cam) { toast("先に権限を取ってください"); return; }
   S.mode = "ocr"; S.step = 0; S.shots = [];
