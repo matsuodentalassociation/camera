@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>姿勢カメラ V7</title>
+<title>姿勢カメラ V8</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -40,7 +40,7 @@
 <body>
 
 <main id="page-top">
-  <h1>姿勢カメラ V7</h1>
+  <h1>姿勢カメラ V8</h1>
   <button id="btn-perms" class="primary">カメラとセンサーの権限を取る</button>
   <p class="muted">カメラ：<span id="perm-cam">未取得</span>　センサー：<span id="perm-sensor">未取得</span></p>
   <h2>患者の登録</h2>
@@ -89,7 +89,7 @@
 
 <script>
 "use strict";
-const APP_VERSION = 7;
+const APP_VERSION = 8;
 const DIRS = ["front", "right", "left", "back"];
 const DIR_JA = { front: "正面", right: "右側面", left: "左側面", back: "背面" };
 const $ = (id) => document.getElementById(id);
@@ -222,7 +222,7 @@ async function takePerms() {
   }
   updatePermUI();
   await renderList();
-  if (PERMS.cam) toast("権限を取りました");
+  if (PERMS.cam) { toast("権限を取りました"); loadAI(); }
 }
 if (typeof DeviceOrientationEvent === "undefined" || typeof DeviceOrientationEvent.requestPermission !== "function") {
   window.addEventListener("deviceorientation", onOrient, true);
@@ -335,20 +335,39 @@ async function runOcr(canvas) {
 
 /* ===== AI（後から読み込む。失敗しても撮影はできる） ===== */
 let MP = null, pose = null, seg = null, aiState = "";
+let aiLoading = null;
 async function loadAI() {
-  if (MP) return;
-  try {
-    MP = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs");
-    const vision = await MP.FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm");
-    pose = await MP.PoseLandmarker.createFromOptions(vision, {
-      baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task", delegate: "GPU" },
-      runningMode: "VIDEO", numPoses: 1
-    });
-    seg = await MP.ImageSegmenter.createFromOptions(vision, {
-      baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/1/selfie_segmenter.tflite", delegate: "GPU" },
-      runningMode: "IMAGE", outputCategoryMask: true, outputConfidenceMasks: false
-    });
-  } catch (e) { console.warn("AI読込:", e); aiState = "AIなし"; }
+  if (pose) return;
+  if (aiLoading) return aiLoading;
+  aiState = "姿勢ポイント準備中…";
+  aiLoading = (async () => {
+    try {
+      if (!MP) MP = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs");
+      const vision = await MP.FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm");
+      if (!pose) {
+        const poseOpts = (delegate) => ({
+          baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task", delegate },
+          runningMode: "VIDEO", numPoses: 1
+        });
+        try { pose = await MP.PoseLandmarker.createFromOptions(vision, poseOpts("GPU")); }
+        catch (e) { console.warn("GPUで姿勢解析を作れず、CPUで再試行:", e); pose = await MP.PoseLandmarker.createFromOptions(vision, poseOpts("CPU")); }
+      }
+      aiState = "";
+      if (!seg) {
+        try {
+          seg = await MP.ImageSegmenter.createFromOptions(vision, {
+            baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/1/selfie_segmenter.tflite", delegate: "GPU" },
+            runningMode: "IMAGE", outputCategoryMask: true, outputConfidenceMasks: false
+          });
+        } catch (e) { console.warn("輪郭用AI読込:", e); }
+      }
+    } catch (e) {
+      console.warn("AI読込:", e);
+      aiState = "姿勢ポイントは使えません";
+    }
+    aiLoading = null;
+  })();
+  return aiLoading;
 }
 
 function contourFromMask(mask, w, h) {
@@ -450,7 +469,7 @@ function drawLoop() {
     ctx.stroke();
     for (const p of S.landmarks) {
       const [x, y] = P(p);
-      ctx.beginPath(); ctx.arc(x, y, Math.max(2.5, cw * 0.005), 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(x, y, Math.max(3.5, cw * 0.007), 0, Math.PI * 2); ctx.fill();
     }
   }
 
