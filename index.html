@@ -3,11 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>姿勢カメラ V10</title>
+<title>姿勢カメラ V11</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
-  body { margin: 0; font-family: sans-serif; background: #101418; color: #eef2f5; }
+  body { margin: 0; font-family: sans-serif; background: #101418; color: #eef2f5; -webkit-user-select: none; user-select: none; }
+  input { -webkit-user-select: text; user-select: text; }
   main { max-width: 560px; margin: 0 auto; padding: 12px; }
   h1 { font-size: 20px; margin: 6px 0 10px; }
   h2 { font-size: 15px; margin: 16px 0 6px; color: #9fb0bd; }
@@ -41,9 +42,10 @@
 <body>
 
 <main id="page-top">
-  <h1>姿勢カメラ V10</h1>
+  <h1>姿勢カメラ V11</h1>
   <button id="btn-perms" class="primary">カメラとセンサーの権限を取る</button>
   <p class="muted">カメラ：<span id="perm-cam">未取得</span>　センサー：<span id="perm-sensor">未取得</span></p>
+  <p id="cam-err" class="err"></p>
   <h2>患者の登録</h2>
 
   <button id="btn-ocr" disabled>カルテを撮って読み取る</button>
@@ -89,7 +91,7 @@
 
 <script>
 "use strict";
-const APP_VERSION = 10;
+const APP_VERSION = 11;
 const DIRS = ["front", "right", "left", "back"];
 const DIR_JA = { front: "正面", right: "右側面", left: "左側面", back: "背面" };
 const $ = (id) => document.getElementById(id);
@@ -432,13 +434,26 @@ async function startCamera() {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
     throw new Error("no-camera-api");
   }
-  S.video = document.createElement("video");
-  S.video.playsInline = true; S.video.muted = true;
-  S.stream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: S.facing, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false
-  });
+  if (!S.video) {
+    S.video = document.createElement("video");
+    S.video.playsInline = true; S.video.muted = true;
+    S.video.style.cssText = "position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;";
+    $("cam-wrap").appendChild(S.video);
+  }
+  // 端末によっては希望サイズ付きだと開けないことがあるので、素の指定へ順に落とす。
+  const tries = [
+    { video: { facingMode: S.facing, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false },
+    { video: { facingMode: S.facing }, audio: false },
+    { video: true, audio: false }
+  ];
+  let lastErr = null;
+  for (const c of tries) {
+    try { S.stream = await navigator.mediaDevices.getUserMedia(c); lastErr = null; break; }
+    catch (e) { lastErr = e; }
+  }
+  if (!S.stream) throw lastErr || new Error("camera-failed");
   S.video.srcObject = S.stream;
-  await S.video.play();
+  try { await S.video.play(); } catch (e) { /* 描画側で再試行する */ }
   requestAnimationFrame(drawLoop);
 }
 function stopCamera() {
@@ -519,8 +534,9 @@ async function beginShoot(mode, baseSetId, patientObj) {
     await startCamera();
   } catch (e) {
     console.warn(e);
-    toast("カメラを開けませんでした");
     cancelShoot();
+    const el = $("cam-err");
+    if (el) el.textContent = "カメラを開けませんでした（" + (e && (e.name || e.message) || e) + "）";
     return;
   }
   loadAI();
@@ -717,9 +733,14 @@ $("btn-ocr").onclick = async () => {
   $("page-top").hidden = true; $("page-detail").hidden = true;
   $("cam-wrap").hidden = false;
   updateCamDir();
-  try { await startCamera(); } catch (e) { toast("カメラを開けませんでした"); cancelShoot(); }
+  try { await startCamera(); } catch (e) {
+    cancelShoot();
+    const el = $("cam-err");
+    if (el) el.textContent = "カメラを開けませんでした（" + (e && (e.name || e.message) || e) + "）";
+  }
 };
 $("btn-start-before").onclick = async () => {
+  const ce = $("cam-err"); if (ce) ce.textContent = "";
   const nm = $("reg-name").value.trim(), cn = $("reg-chart").value.trim();
   if (nm && cn) await registerPatient();
   if (!currentPatient) { toast("患者が決まっていません"); return; }
