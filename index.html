@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>姿勢カメラ V12</title>
+<title>姿勢カメラ V13</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -42,17 +42,19 @@
 <body>
 
 <main id="page-top">
-  <h1>姿勢カメラ V12</h1>
+  <h1>姿勢カメラ V13</h1>
   <button id="btn-perms" class="primary">カメラとセンサーの権限を取る</button>
   <p class="muted">カメラ：<span id="perm-cam">未取得</span>　センサー：<span id="perm-sensor">未取得</span></p>
   <p id="cam-err" class="err"></p>
   <h2>患者の登録</h2>
 
   <button id="btn-ocr" disabled>カルテを撮って読み取る</button>
+  <form id="reg-form">
   <label class="fld-label" for="reg-name">患者名</label>
-  <input id="reg-name" type="text" autocomplete="off">
+  <input id="reg-name" type="text" autocomplete="off" enterkeyhint="next">
   <label class="fld-label" for="reg-chart">カルテ番号</label>
-  <input id="reg-chart" type="text" inputmode="numeric" autocomplete="off">
+  <input id="reg-chart" type="text" inputmode="numeric" autocomplete="off" enterkeyhint="done">
+  </form>
   <div id="patient-list"></div>
   <button id="btn-start-before" class="primary" disabled>ビフォーを撮る</button>
   <div id="after-area"></div>
@@ -91,7 +93,7 @@
 
 <script>
 "use strict";
-const APP_VERSION = 12;
+const APP_VERSION = 13;
 const DIRS = ["front", "right", "left", "back"];
 const DIR_JA = { front: "正面", right: "右側面", left: "左側面", back: "背面" };
 const $ = (id) => document.getElementById(id);
@@ -736,6 +738,14 @@ async function openDetail(setId) {
 $("btn-perms").onclick = takePerms;
 $("reg-name").addEventListener("input", syncOcrBtn);
 $("reg-chart").addEventListener("input", syncOcrBtn);
+// キーボードの確定（Enter）で入力を完了する：両方入っていれば登録、名前だけなら番号の欄へ進む（V13）。
+$("reg-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const nm = $("reg-name").value.trim(), cn = $("reg-chart").value.trim();
+  if (nm && cn) await registerPatient();
+  else if (nm) $("reg-chart").focus();
+  else $("reg-name").focus();
+});
 $("btn-ocr").onclick = async () => {
   if (!PERMS.cam) { toast("先に権限を取ってください"); return; }
   S.mode = "ocr"; S.step = 0; S.shots = [];
