@@ -1,973 +1,1044 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="st-scope-build" content="ST-Oscillograph-V47-20261114-01">
-<title>ST-Oscillograph-V47-20261114-01</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>姿勢カメラ V18</title>
 <style>
-*{box-sizing:border-box}
-body{margin:0;height:100dvh;display:flex;flex-direction:column;overflow:hidden;background:#f8fafc;color:#1e293b;font:11px Consolas,"Noto Sans JP",monospace;user-select:none}
-button,input,select,textarea{font:inherit}
-button{border:1px solid #94a3b8;border-radius:3px;background:#fff;padding:4px 6px;font-weight:bold;cursor:pointer}
-button:hover{background:#eff6ff}
-button:disabled{opacity:.5;cursor:default}
-button.primary{background:#2563eb;color:#fff}
-button.stopping{background:#dc2626;color:#fff}
-input[type=range]{accent-color:#2563eb;min-width:50px}
-select,input[type=number],input[type=text]{border:1px solid #94a3b8;border-radius:4px;padding:3px;color:#1d4ed8;background:#fff}
-header#appHeader{display:block;flex:none;width:min(1120px,calc(100% - 10px));margin:0 auto;padding:4px 7px;background:#fff;border-bottom:1px solid #94a3b8}
-.topBar,.subBar{display:flex;align-items:center;flex-wrap:wrap;gap:4px;min-height:29px;white-space:normal}
-.topBar{border-bottom:1px solid #cbd5e1;padding-bottom:3px}
-.subBar{padding-top:3px}
-.brand{font-weight:900;font-size:12px;min-width:0;color:#1e293b}
-.topBar label,.subBar label{display:flex;align-items:center;gap:4px;font-weight:bold}
-.status{max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#1d4ed8}
-#loadStatusBadge{flex:1 1 145px;min-width:145px}
-#fitbitStatus{flex:0 1 auto}
-#timelineCompression{margin-left:auto}
-.tabs{margin-left:0;display:flex;gap:4px}
-.tabs button[aria-selected=true]{background:#1e40af;color:#fff}
-#updatePanel{display:flex;align-items:center;gap:4px}
-#updateStatus{display:none}
-#applyUpdateBtn[hidden]{display:none}
-.subBar>label{flex:1 1 190px;min-width:190px}
-.patientField{height:25px;width:100%;min-width:0;flex:1;border:1px solid #cbd5e1;border-radius:4px;padding:3px 6px;color:#64748b;background:#fff}
-.tabs{flex:0 0 auto}
-main{flex:1;min-height:0;padding:5px}
-.page{height:100%;min-height:0}.page[hidden]{display:none!important}
-#scopePage{display:flex;justify-content:center}
-#scopeContainer{width:1120px;max-width:100%;height:100%;background:#fff;border:1px solid #94a3b8;border-radius:2px;display:flex;flex-direction:column;overflow:hidden}
-#scaleHeader{flex:none;min-height:27px;display:grid;grid-template-columns:16% 44% 12% 10% 10% 8%;border-bottom:2px solid #94a3b8;font-size:9px;font-weight:bold}
-#scaleHeader>div{display:flex;align-items:center;justify-content:center;min-width:0;border-right:1px solid #cbd5e1}
-#motionHeader{justify-content:space-between!important;padding:0 4px}
-#soundHeader{flex-wrap:wrap;gap:2px;color:#1d4ed8}
-#screenViewport{position:relative;flex:1;min-height:80px;overflow:hidden;background:#fff;touch-action:none;cursor:grab}
-#waveCanvas{display:block;width:100%;height:100%}
-.measureLine{position:absolute;left:0;width:100%;height:24px;margin-top:-12px;z-index:5;cursor:row-resize;touch-action:none}
-.measureLine:before{content:"";position:absolute;top:11px;width:100%;height:2px;background:#0f172a}
-#lineB:before{background:#dc2626}
-.labelWrap{position:absolute;left:6px;top:1px;display:flex;gap:4px;align-items:stretch}
-.lineLabel{display:flex;gap:5px;white-space:nowrap;padding:3px 5px;background:#fff;border:1px solid #0f172a;border-radius:4px;font-weight:bold;pointer-events:none}
-#lineB .lineLabel{border-color:#dc2626;color:#b91c1c}
-.clockLabel{color:#1d4ed8}.hzLabel{color:#4338ca}
-.grabTag{display:flex;align-items:center;padding:0 7px;font-size:10px;font-weight:bold;color:#fff;background:#0f172a;border-radius:4px;user-select:none}
-#lineB .grabTag{background:#dc2626}
-#intervalBracket{position:absolute;right:14%;border-right:2px dashed #3b82f6;pointer-events:none;z-index:3}
-#playheadLine{position:absolute;left:0;width:100%;height:24px;margin-top:-12px;z-index:7;cursor:row-resize;touch-action:none}
-#playheadLine:before{content:"";position:absolute;top:11px;width:100%;height:3px;background:#fbbf24;box-shadow:0 1px 3px #0006}
-#intervalHud{position:absolute;right:4px;width:12%;min-width:108px;max-width:145px;z-index:8;padding:5px;background:#fff;border:1px solid #3b82f6;border-radius:4px;display:flex;flex-direction:column;gap:4px;text-align:center}
-#intervalSec{color:#1d4ed8}
-#seekButtons{display:grid;grid-template-columns:1fr 1fr;gap:3px}
-#audioStatusText{color:#64748b;font-size:9px}
-#controls{flex:none;max-height:34%;overflow:auto;display:flex;flex-direction:column;gap:4px;padding:5px 6px;background:#f8fafc;border-top:2px solid #cbd5e1}
-.controlRow{display:flex;align-items:center;flex-wrap:wrap;gap:4px}
-.controlRow input[type=range]{flex:1}
-#motionOffsetInput{width:70px}
-#currentCenterTime{padding:3px 6px;background:#fff;border:1px solid #cbd5e1;color:#1d4ed8}
-#signalControls{padding:5px;background:#eff6ff;border:1px solid #93c5fd;border-radius:4px;gap:8px}
-#signalControls label{display:flex;align-items:center;gap:5px;flex:1;min-width:230px;color:#1d4ed8}
-#signalControls output{min-width:55px}
-#dataNotice{color:#64748b;font-size:9px}
-#reportPage{overflow:auto;background:#f1f5f9;padding:5px}
-.paper{max-width:950px;margin:auto;padding:20px;background:#fff;border:1px solid #cbd5e1;user-select:text}
-.paper h1{margin:0;font-size:20px}
-.paper h2{font-size:14px;margin:18px 0 7px;border-bottom:1px solid #94a3b8}
-.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-.card{border:1px solid #cbd5e1;padding:10px}
-.card strong{display:block;margin-top:7px;font-size:16px}
-.warning{padding:8px;background:#fff7ed;border:1px solid #fdba74;color:#9a3412}
-#stageChart{width:100%;height:110px;border:1px solid #cbd5e1}
-#doctorNotes{width:100%;min-height:110px;resize:vertical;padding:8px}
-.reportActions{text-align:right}
-@media(max-width:760px){
-  header#appHeader{width:calc(100% - 10px)}
-  .brand{min-width:0}
-  #timelineCompression{margin-left:0}
-  .subBar>label{flex:1 1 130px;min-width:130px}
-  .patientField{width:100%}
-  .lineLabel{font-size:9px}
-  .cards{grid-template-columns:1fr}
-  #scaleHeader{font-size:8px}
-  #controls{max-height:38%}
-}
-@media print{
-  body{display:block;height:auto;overflow:visible;background:#fff}
-  header,#scopePage,.reportActions{display:none!important}
-  main,#reportPage{display:block!important;height:auto;overflow:visible;padding:0}
-  .paper{max-width:none;border:0;padding:0}
-  #doctorNotes{border:0}
-}
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: sans-serif; background: #101418; color: #eef2f5; -webkit-user-select: none; user-select: none; }
+  input { -webkit-user-select: text; user-select: text; }
+  main { max-width: 560px; margin: 0 auto; padding: 12px; }
+  h1 { font-size: 20px; margin: 6px 0 10px; }
+  h2 { font-size: 15px; margin: 16px 0 6px; color: #9fb0bd; }
+  .muted { color: #9fb0bd; font-size: 13px; }
+  .err { color: #ff9a9a; font-size: 14px; }
+  button { width: 100%; padding: 14px; margin: 6px 0; font-size: 16px; border-radius: 10px; border: 1px solid #3a4754; background: #232e39; color: #eef2f5; }
+  button.primary { background: #0f6fde; border-color: #0f6fde; color: #fff; font-weight: bold; }
+  button.sub { background: transparent; }
+  button.danger { background: #7a2020; border-color: #7a2020; color: #fff; }
+  button:disabled { opacity: .45; }
+  input[type="text"] { width: 100%; padding: 12px; font-size: 16px; border-radius: 8px; border: 1px solid #3a4754; background: #0d1116; color: #eef2f5; margin: 6px 0; }
+  .fld-label { display: block; font-size: 12px; color: #9fb0bd; margin: 10px 0 0; }
+  .tag { display: inline-block; padding: 2px 10px; border-radius: 999px; background: #2c3844; font-size: 12px; }
+  .set-item { text-align: left; }
+  #cam-wrap { position: fixed; inset: 0; background: #000; z-index: 20; }
+  #cam-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #cam-top { position: absolute; top: 0; left: 0; right: 0; padding: 10px 12px; background: linear-gradient(rgba(0,0,0,.65), transparent); z-index: 2; }
+  #cam-dir { font-size: 22px; font-weight: bold; }
+  #cam-info { font-size: 13px; color: #cfe0ee; margin-top: 2px; }
+  #cam-bottom { position: absolute; left: 0; right: 0; bottom: 0; padding: 12px; background: linear-gradient(transparent, rgba(0,0,0,.7)); z-index: 2; }
+  #shutter { width: 76px; height: 76px; border-radius: 50%; background: #fff; border: 5px solid #0f6fde; margin: 0 auto; display: block; }
+  #shutter:active { background: #bcd8ff; }
+  .cam-btns { display: flex; gap: 8px; margin-top: 10px; }
+  .cam-btns button { padding: 10px; font-size: 14px; }
+  .thumbs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .thumbs figure { margin: 0; }
+  .thumbs figcaption { font-size: 12px; color: #9fb0bd; margin-top: 4px; line-height: 1.5; }
+  #toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: #0f6fde; color: #fff; padding: 10px 18px; border-radius: 999px; font-size: 14px; z-index: 50; display: none; white-space: nowrap; }
 </style>
 </head>
 <body>
-<header id="appHeader">
-  <div class="topBar">
-    <div class="brand">ST-Oscillograph-V47</div>
-    <label>ログ種別
-      <select id="logTypeSelect" aria-label="ログ種別">
-        <option value="tracker">睡眠ログ</option>
-        <option value="fitbit">Fitbit JSON</option>
-      </select>
-    </label>
-    <button id="logSelectBtn" type="button">ログ選択</button>
-    <button id="logReadBtn" type="button">ログ読込み</button>
-    <span id="loadStatusBadge" class="status" role="status">ログ未読込み</span>
-    <span id="fitbitStatus" class="status" role="status">未読込</span>
-    <label id="timelineCompression">タイムライン圧縮
-      <select id="windowScaleSelect">
-        <option value="60">1分</option><option value="120">2分</option>
-        <option value="300">5分</option><option value="600">10分</option>
-        <option value="1800">30分</option><option value="3600" selected>1時間</option>
-        <option value="all">全表示</option>
-      </select>
-    </label>
-    <div id="updatePanel">
-      <button id="checkUpdateBtn" type="button">更新を確認</button>
-      <span id="updateStatus" role="status" aria-live="polite"></span>
-      <button id="applyUpdateBtn" type="button" hidden>更新</button>
-    </div>
-    <input id="masterInput" type="file" accept=".json,.zip" hidden>
-    <input id="fitbitInput" type="file" accept=".json,.zip" multiple hidden>
+
+<main id="page-top">
+  <h1>姿勢カメラ V18</h1>
+  <button id="btn-perms" class="primary">カメラとセンサーの権限を取る</button>
+  <p class="muted">カメラ：<span id="perm-cam">未取得</span>　センサー：<span id="perm-sensor">未取得</span></p>
+  <p id="cam-err" class="err"></p>
+  <h2>患者の登録</h2>
+
+  <button id="btn-ocr" disabled>カルテを撮って読み取る</button>
+  <form id="reg-form">
+  <label class="fld-label" for="reg-name">患者名</label>
+  <input id="reg-name" type="text" autocomplete="off" enterkeyhint="next">
+  <label class="fld-label" for="reg-chart">カルテ番号</label>
+  <input id="reg-chart" type="text" inputmode="numeric" autocomplete="off" enterkeyhint="done">
+  </form>
+  <div id="patient-list"></div>
+  <button id="btn-start-before" class="primary" disabled>ビフォーを撮る</button>
+  <div id="after-area"></div>
+  <h2>記録</h2>
+  <div id="set-list"></div>
+  <p id="list-empty" class="muted">まだありません</p>
+</main>
+
+<main id="page-detail" hidden>
+  <button id="btn-back-top" class="sub">← 戻る</button>
+  <h1 id="detail-title">記録</h1>
+  <p id="pitch-note" class="err" hidden></p>
+  <div class="thumbs" id="detail-thumbs"></div>
+  <button id="btn-export-json">記録データ（傾き・輪郭）を書き出す</button>
+  <button id="btn-delete-set" class="danger">この記録を削除する</button>
+</main>
+
+<div id="cam-wrap" hidden>
+  <canvas id="cam-canvas"></canvas>
+  <div id="cam-top">
+    <div id="cam-dir">正面</div>
+    <div id="cam-info"></div>
   </div>
-  <div class="subBar">
-    <label>診療所<input id="clinicField" class="patientField" type="text" value="ログから取得" readonly></label>
-    <label>カルテNo<input id="chartNoField" class="patientField" type="text" value="ログから取得" readonly></label>
-    <label>氏名<input id="patientNameField" class="patientField" type="text" value="ログから取得" readonly></label>
-    <div class="tabs">
-      <button id="scopeTab" aria-selected="true">オシロスコープ</button>
-      <button id="reportTab" aria-selected="false">統合レポート</button>
+  <div id="cam-bottom">
+    <button id="shutter" aria-label="撮影"></button>
+    <div class="cam-btns">
+      <button id="btn-cam-cancel" class="sub">やめる</button>
+      <button id="btn-cam-skip" class="sub">撮らない</button>
+      <button id="btn-cam-finish" class="sub">ここまでで保存</button>
+      <button id="btn-cam-flip" class="sub">カメラ切替</button>
+      <button id="btn-cam-grid" class="sub">格子</button>
     </div>
-  </div>
-</header>
-<main>
-<section id="scopePage" class="page">
-<div id="scopeContainer">
-  <div id="scaleHeader">
-    <div id="motionHeader"><span>0G</span><span id="motionMidLabel">0.1G</span><span id="motionMaxLabel">0.2G</span></div>
-    <div id="soundHeader">青：音響波形 ／ 合成倍率 <span id="pcmScaleText">1.00</span>倍</div>
-    <div>時計時刻 ↓</div><div>SpO₂ 90–100%</div><div>心拍 bpm</div><div>睡眠段階</div>
-  </div>
-  <div id="screenViewport">
-    <canvas id="waveCanvas"></canvas>
-    <div id="lineA" class="measureLine"><div class="labelWrap"><div class="grabTag">A</div><div class="lineLabel"><span id="labelATime" class="clockLabel">--:--:--</span><span id="labelADb">-- dB</span><span id="labelAHz" class="hzLabel">-- Hz</span></div></div></div>
-    <div id="lineB" class="measureLine"><div class="labelWrap"><div class="grabTag">B</div><div class="lineLabel"><span id="labelBTime" class="clockLabel">--:--:--</span><span id="labelBDb">-- dB</span><span id="labelBHz" class="hzLabel">-- Hz</span></div></div></div>
-    <div id="playheadLine" role="slider" tabindex="0" aria-label="区間内の再生位置" aria-orientation="vertical" aria-valuemin="0" aria-valuemax="1" aria-valuenow="0"></div>
-    <div id="intervalBracket"></div>
-    <div id="intervalHud">
-      <div>計測区間 <span id="intervalSec">0秒</span></div>
-      <div><span id="replayTime">--:--:--</span><br><span id="replayDb">-- dB</span> / <span id="replayHz">-- Hz</span></div>
-      <div id="seekButtons"><button id="rewindBtn">−5秒</button><button id="forwardBtn">＋5秒</button></div>
-      <button id="playIntervalBtn" class="primary"><span id="playIcon">▶</span> <span id="playText">区間再生</span></button>
-      <button id="refPlayBtn" type="button" disabled>基準音を再生</button>
-      <div id="audioStatusText" role="status">待機中</div>
-    </div>
-  </div>
-  <div id="controls">
-    <div class="controlRow">
-      <b>タイムライン:</b><button id="timePrevBtn">◀ 後進</button>
-      <input id="timeSlider" aria-label="タイムライン中央時刻" type="range" min="0" max="1" step="0.1" value="0">
-      <button id="timeNextBtn">前進 ▶</button><span>中央時計時刻:</span><span id="currentCenterTime">--:--:--</span>
-    </div>
-    <div id="signalControls" class="controlRow">
-      <label><b>波形倍率</b><input id="waveformGainSlider" aria-label="波形倍率" type="range" min="0.25" max="100" step="0.25" value="1"><output id="waveformGainValue">1.00倍</output></label>
-    </div>
-    <div class="controlRow">
-      <b>体動:</b><span style="color:#2563eb">折れ線＝平均</span><span style="color:#ea580c">横棒＝最大</span>
-      <label>スケール: <input id="motionScaleSlider" aria-label="体動スケール" type="range" min="0.01" max="0.30" step="0.01" value="0.20"><output id="motionScaleValue">自動</output></label><button id="motionScaleAutoBtn" type="button">自動</button><label>表示: <select id="motionModeSelect" aria-label="体動の表示"><option value="both">両方</option><option value="bar">棒だけ</option><option value="line">線だけ</option></select></label>
-    </div>
-    <div class="controlRow">
-      <b>体動位置補正:</b><input id="motionOffsetSlider" aria-label="体動位置補正秒" type="range" min="-300" max="300" step="0.5" value="0">
-      <input id="motionOffsetInput" aria-label="体動位置補正秒の数値入力" type="number" min="-3600" max="3600" step="0.5" value="0"><span>秒</span>
-      <button id="motionOffsetMinusBtn">−1秒</button><button id="motionOffsetPlusBtn">＋1秒</button><button id="motionOffsetResetBtn">0に戻す</button><span id="motionOffsetDirection">補正なし</span>
-    </div>
-    <!-- 旧版の更新チェックが必須要素として数えるため、画面に出さない形で残す -->
-    <input type="hidden" id="volumeGainSlider" value="1">
-    <div id="dataNotice">青い波形は読み込んだ音声範囲のみ。環境音推定を差し引いた表示用波形です。波形倍率は再生音量やdB／Hz計測値を変更しません。dBは未校正の参考値です。</div>
   </div>
 </div>
-</section>
-<section id="reportPage" class="page" hidden>
-  <div class="paper">
-    <div class="reportActions"><button id="printBtn">印刷 / PDF保存</button></div>
-    <h1>統合睡眠スコアレポート</h1>
-    <p id="reportPeriod">セッション未読込</p><p id="reportMode" class="warning">データ未読込</p>
-    <div class="cards">
-      <div class="card">Fitbit睡眠スコア<strong id="fitbitScoreText">未取得</strong></div>
-      <div class="card">音響・体動の参考候補<strong id="eventCountText">未解析</strong></div>
-      <div class="card">統合睡眠補正スコア<strong>未検証のため算出しない</strong></div>
-    </div>
-    <h2>Fitbit睡眠ステージ</h2><canvas id="stageChart"></canvas><p id="stageSummary">ステージデータなし</p>
-    <h2>参照情報</h2><p id="eventSummary">SleepTrackerログ未読込</p><p id="fitbitSummary">Fitbitデータ未読込</p>
-    <h2>医師所見</h2><textarea id="doctorNotes" placeholder="医師が所見を入力してください。自動診断文ではありません。"></textarea>
-    <p class="warning">体動と音量低下は観察候補であり、無呼吸・中途覚醒の診断ではありません。補正スコアの臨床的妥当性は未検証です。</p>
-  </div>
-</section>
-</main>
+
+<div id="toast"></div>
+
 <script>
-'use strict';
-(() => {
-  const $=id=>document.getElementById(id),canvas=$('waveCanvas'),ctx=canvas.getContext('2d'),viewport=$('screenViewport');
-  const RATE=10,PEAK_RATE=200,SCALES=[.005,.01,.02,.05,.1,.2],COLORS={deep:'#4338ca',light:'#60a5fa',rem:'#a855f7',wake:'#f97316'};
-  const lifetime=new AbortController();
-  let logs=[],bins=[],clips=[],metadata=[],motionPoints=[],motionPeak=0,fitbit=emptyFitbit();
-  let startMs=Date.now(),duration=1,center=0,span=3600,motionOffset=0,motionSetting='auto',waveGain=1,motionMode='both';
-  let ya=0,yb=0,cursor=0,intervalStart=0,intervalEnd=1,initialized=false,hasTracker=false;
-  let trackerLoading=false,fitbitLoading=false,trackerGeneration=0,fitbitGeneration=0,playGeneration=0;
-  let ac=null,sources=[],playing=false,preparing=false,anchorSec=0,anchorTime=0,playFrame=0,drawFrame=0,gesture=null,observer=null,disposed=false;
-  let pendingTrackerFile=null,pendingFitbitFiles=[];
-  let refEntry=null,refSource=null,refPreparing=false,refGeneration=0;
-  const on=(t,e,f,o={})=>t.addEventListener(e,f,{...o,signal:lifetime.signal});
-  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
-  function num(v,f=null){if(v===null||v===undefined||v==='')return f;const n=Number(v);return Number.isFinite(n)?n:f}
-  function ms(v){if(v===null||v===undefined||v==='')return null;const n=Number(v);if(Number.isFinite(n))return n<1e11?n*1000:n;const t=Date.parse(v);return Number.isFinite(t)?t:null}
-  function clock(s){const d=new Date(startMs+s*1000);return[d.getHours(),d.getMinutes(),d.getSeconds()].map(v=>String(v).padStart(2,'0')).join(':')}
-  function formatInterval(s){const m=Math.floor(s/60);let rest=(s-m*60).toFixed(1);if(rest.endsWith('.0'))rest=rest.slice(0,-2);return m>0?m+'分'+rest+'秒':rest+'秒'}
-  function datetime(s){const d=new Date(startMs+s*1000);return`${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${clock(s)}`}
-  function save(k,v){try{localStorage.setItem(k,String(v))}catch(_){}}
-  function stored(k,d){try{return localStorage.getItem(k)??d}catch(_){return d}}
-  function emptyFitbit(){return{stages:[],bpm:[],spo2:[],temperature:[],score:null,spo2Range:null,sourceCount:0}}
+"use strict";
+const APP_VERSION = 18;
+const DIRS = ["front", "right", "left", "back"];
+const DIR_JA = { front: "正面", right: "右側面", left: "左側面", back: "背面" };
+const $ = (id) => document.getElementById(id);
+function toast(msg, ms) {
+  const t = $("toast"); t.textContent = msg; t.style.display = "block";
+  clearTimeout(toast._h); toast._h = setTimeout(() => { t.style.display = "none"; }, ms || 1800);
+}
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
 
-  /* ===== 音声（iPhone対応） =====
-     1) 読込時はAudioContextを作らない（iPhoneでは操作の外で作ると無音になりやすい）
-     2) 音声は読込時にデコードして数値（Float32）で保持する
-     3) 再生ボタンの操作の中で、awaitせずに同期的に再生を開始する */
-  function audioContext(){
-    if(!ac){
-      const C=window.AudioContext||window.webkitAudioContext;
-      if(!C)throw Error('Web Audio非対応');
-      ac=new C()
-    }
-    return ac
+/* ===== 保存 ===== */
+const DB = {
+  db: null,
+  open() {
+    return new Promise((res, rej) => {
+      const r = indexedDB.open("posture-cam", 2);
+      r.onupgradeneeded = () => {
+        const d = r.result;
+        if (!d.objectStoreNames.contains("sets")) d.createObjectStore("sets", { keyPath: "id" });
+        if (!d.objectStoreNames.contains("photos")) d.createObjectStore("photos", { keyPath: "id" }).createIndex("setId", "setId", { unique: false });
+        if (!d.objectStoreNames.contains("patients")) d.createObjectStore("patients", { keyPath: "id" });
+      };
+      r.onsuccess = () => { DB.db = r.result; res(); };
+      r.onerror = () => rej(r.error);
+    });
+  },
+  put(store, v) {
+    return new Promise((res, rej) => {
+      const t = DB.db.transaction(store, "readwrite");
+      t.objectStore(store).put(v);
+      t.oncomplete = res; t.onerror = () => rej(t.error);
+    });
+  },
+  get(store, k) {
+    return new Promise((res, rej) => {
+      const rq = DB.db.transaction(store).objectStore(store).get(k);
+      rq.onsuccess = () => res(rq.result || null); rq.onerror = () => rej(rq.error);
+    });
+  },
+  all(store) {
+    return new Promise((res, rej) => {
+      const rq = DB.db.transaction(store).objectStore(store).getAll();
+      rq.onsuccess = () => res(rq.result || []); rq.onerror = () => rej(rq.error);
+    });
+  },
+  bySet(setId) {
+    return new Promise((res, rej) => {
+      const rq = DB.db.transaction("photos").objectStore("photos").index("setId").getAll(setId);
+      rq.onsuccess = () => res(rq.result || []); rq.onerror = () => rej(rq.error);
+    });
+  },
+  del(store, k) {
+    return new Promise((res, rej) => {
+      const t = DB.db.transaction(store, "readwrite");
+      t.objectStore(store).delete(k);
+      t.oncomplete = res; t.onerror = () => rej(t.error);
+    });
   }
-  // 再生ボタンのクリック処理の「最初の同期部分」から呼ぶ。ここでawaitしない。
-  function unlockAudioSync(){
-    const c=audioContext();
-    try{
-      if(navigator.audioSession)navigator.audioSession.type='playback'
-    }catch(_){}
-    try{
-      const silent=c.createBuffer(1,1,c.sampleRate),s=c.createBufferSource();
-      s.buffer=silent;s.connect(c.destination);s.start(0)
-    }catch(_){}
-    if(c.state!=='running'){c.resume().catch(()=>{})}
-    return c
-  }
-  // 読込時のデコード用（再生はしないので、操作の外で使ってもよい）
-  function decodeWithOffline(data,rate){
-    const O=window.OfflineAudioContext||window.webkitOfflineAudioContext;
-    if(!O)return Promise.reject(Error('OfflineAudioContext非対応'));
-    return new Promise((resolve,reject)=>{
-      let settled=false;
-      const ok=b=>{if(!settled){settled=true;resolve(b)}},ng=e=>{if(!settled){settled=true;reject(e||Error('デコード失敗'))}};
-      try{
-        const oc=new O(1,1,rate||44100);
-        const p=oc.decodeAudioData(data.slice(0),ok,ng);
-        if(p&&typeof p.then==='function')p.then(ok,ng)
-      }catch(e){ng(e)}
-    })
-  }
-  // 16bit PCM WAV の自前デコード（iPhoneの標準デコードが使えなかった時の予備）
-  function decodePcmWav(data){
-    const u8=data instanceof Uint8Array?data:new Uint8Array(data);
-    const dv=new DataView(u8.buffer,u8.byteOffset,u8.byteLength);
-    let p=12,channels=1,rate=44100,bits=16,dStart=-1,dLen=0;
-    while(p+8<=u8.length){
-      const id=String.fromCharCode(u8[p],u8[p+1],u8[p+2],u8[p+3]),sz=dv.getUint32(p+4,true);
-      if(id==='fmt '){channels=dv.getUint16(p+10,true);rate=dv.getUint32(p+12,true);bits=dv.getUint16(p+22,true)}
-      else if(id==='data'){dStart=p+8;dLen=Math.min(sz,u8.length-dStart);break}
-      p+=8+sz+(sz&1)
-    }
-    if(dStart<0||bits!==16||!channels)throw Error('未対応のWAV形式です');
-    const frames=Math.floor(dLen/(2*channels)),chans=[];
-    for(let c=0;c<channels;c++)chans.push(new Float32Array(frames));
-    for(let i=0;i<frames;i++)for(let c=0;c<channels;c++){
-      chans[c][i]=dv.getInt16(dStart+(i*channels+c)*2,true)/32768
-    }
-    return{rate,channels:chans}
-  }
-  // 音声を読み込み、{rate, channels:[Float32Array...]} を返す（AudioContextは使わない）
-  async function decodeClip(data){
-    const fmt=wavFmtInfo(data);
-    if(fmt&&fmt.tag===0x11){
-      const pcm=decodeImaWav(data),f=new Float32Array(pcm.length);
-      for(let i=0;i<pcm.length;i++)f[i]=pcm[i]/32768;
-      return{rate:fmt.sampleRate||16000,channels:[f]}
-    }
-    const rate=fmt&&fmt.sampleRate?fmt.sampleRate:44100;
-    try{
-      const buf=await decodeWithOffline(data,rate);
-      const channels=[];
-      for(let i=0;i<buf.numberOfChannels;i++)channels.push(new Float32Array(buf.getChannelData(i)));
-      return{rate:buf.sampleRate,channels}
-    }catch(error){
-      console.warn('標準デコード失敗、PCMとして読み直し:',error);
-      if(fmt&&fmt.tag===1)return decodePcmWav(data);
-      throw error
-    }
-  }
-  // 保持していた数値から、再生用のAudioBufferを作る（再生ボタンの同期部分で使う）
-  function toAudioBuffer(context,clip){
-    const len=clip.channels[0].length,b=context.createBuffer(clip.channels.length,len,clip.rate);
-    for(let i=0;i<clip.channels.length;i++)b.copyToChannel(clip.channels[i],i);
-    return b
-  }
-  // 解析用（features）に渡すための、AudioBufferと同じ形の入れ物
-  function clipAsBuffer(clip){
-    const len=clip.channels[0].length;
-    return{
-      duration:len/clip.rate,length:len,sampleRate:clip.rate,numberOfChannels:clip.channels.length,
-      getChannelData:i=>clip.channels[i]
-    }
-  }
+};
 
-  window.STScope={busy:()=>trackerLoading||fitbitLoading||playing||preparing||!!gesture||!!refSource||refPreparing,dispose(){if(disposed)return;disposed=true;trackerGeneration++;fitbitGeneration++;stopPlayback();stopRef();lifetime.abort();observer?.disconnect();cancelAnimationFrame(drawFrame);ac?.close().catch(()=>{});logs=[];bins=[];clips=[];metadata=[];motionPoints=[]}};
-function path(v){let s=String(v??'').replace(/\\/g,'/');try{s=decodeURIComponent(s)}catch(_){}return s.replace(/^\.\//,'').split(/[?#]/)[0].toLowerCase()}
-const base=v=>path(v).split('/').pop();
-function rawLogs(d){return[d?.session?.timeSeriesLogs,d?.timeSeriesLogs,d?.session?.logs,d?.logs,d?.session?.measurements,d?.measurements,d?.session?.samples,d?.samples].find(Array.isArray)||[]}
-function rawBins(d){return[d?.session?.profileBins,d?.profileBins].find(Array.isArray)||[]}
-function clipFiles(m){return[m?.audioFile,m?.audioFilename,m?.audioFileName,m?.fileName,m?.file,m?.filename,m?.path,m?.url,m?.name,m?.audio?.file,m?.audio?.path].filter(v=>typeof v==='string'&&v)}
-function clipList(d){
-  if(Array.isArray(d))return d.filter(m=>m&&typeof m==='object');if(!d||typeof d!=='object')return[];
-  for(const k of['clips','recordingClips','recordings','audioClips','items','data','session'])if(d[k]&&typeof d[k]==='object'){const f=clipList(d[k]);if(f.length)return f}
-  if(clipFiles(d).length)return[d];
-  return Object.entries(d).filter(([k,v])=>/\.(wav|webm|mp3|ogg|m4a|mp4|aac)$/i.test(k)&&v&&typeof v==='object').map(([k,v])=>({...v,audioFile:k}))
+/* ===== 傾き ===== */
+let orient = { alpha: null, beta: null, gamma: null };
+let gotOrientValue = false;
+function onOrient(e) {
+  orient = { alpha: e.alpha, beta: e.beta, gamma: e.gamma };
+  if (e.beta != null) gotOrientValue = true;
 }
-function categoryOf(m){const v=m?.category??m?.type??m?.label??m?.classification??m?.audio?.category;return typeof v==='object'?(v?.category??v?.label??v?.type??'unknown'):(v??'unknown')}
-function clipStart(m,name){
-  for(const k of['startSec','elapsedSec','offsetSec','timeSec','startSeconds']){const n=num(m?.[k]);if(n!==null&&n>=0)return n}
-  for(const k of['startMs','offsetMs','elapsedMs']){const n=num(m?.[k]);if(n!==null){const s=n>=1e11?(n-startMs)/1000:n/1000;if(s>=0)return s}}
-  for(const k of['startedAt','startTime','startAt','timestamp','recordedAt','createdAt']){const t=ms(m?.[k]);if(t!==null&&t>=startMs)return(t-startMs)/1000}
-  const id=num(m?.id);if(id!==null&&id>=1e9){const t=ms(id);if(t>=startMs)return(t-startMs)/1000}
-  const n=base(name),a=n.match(/^clip_(\d+(?:\.\d+)?)_[^/]+\.(wav|webm|mp3|ogg|m4a|mp4|aac)$/i),b=n.match(/(?:^|[_-])(\d+(?:\.\d+)?)s(?:[_-]|\.)/i),c=n.match(/(?:^|[_-])(\d{10,13})(?:[_-]|\.)/);
-  if(a)return Number(a[1]);if(b)return Number(b[1]);if(c){const t=ms(Number(c[1]));if(t>=startMs)return(t-startMs)/1000}return null
+function tiltDeg(o) {
+  if (o.beta == null || o.gamma == null) return null;
+  const b = o.beta * Math.PI / 180, g = o.gamma * Math.PI / 180;
+  const rollScreen = Math.atan2(-Math.cos(b) * Math.sin(g), Math.sin(b)) * 180 / Math.PI;
+  // スマホを横向きで構えた時、画面の向きの分だけズレる。縦向きで構えた前提で計算していたのが
+  // 「格子は垂直なのに写真が斜め」の原因（V14で画面の向きを差し引く）。
+  const so = (typeof screen !== "undefined" && screen.orientation && typeof screen.orientation.angle === "number")
+    ? screen.orientation.angle : (typeof window.orientation === "number" ? window.orientation : 0);
+  let r = rollScreen - so;
+  r = ((r + 540) % 360) - 180;
+  // 写真の横方向に対して-90〜90に丸める（±180付近は上下逆さま扱いで0側に寄せる）
+  if (r > 90) r -= 180;
+  if (r < -90) r += 180;
+  return Math.round(r * 10) / 10;
 }
-function findMeta(name){let f=metadata.filter(m=>clipFiles(m).some(p=>path(p)===path(name)));if(!f.length)f=metadata.filter(m=>clipFiles(m).some(p=>base(p)===base(name)));if(f.length)return Object.assign({},...f);const stem=base(name).replace(/\.[^.]+$/,'');f=metadata.filter(m=>m.id!==undefined&&String(m.id).toLowerCase()===stem);return f.length===1?f[0]:{}}
-function indexMotion(){motionPoints=logs.filter(x=>x.motion!==null);motionPeak=0;if(motionPoints.length)for(const x of motionPoints)motionPeak=Math.max(motionPeak,x.motion);else for(const b of bins)motionPeak=Math.max(motionPeak,b.max)}
-function parseTracker(data){
-  if(!data||typeof data!=='object'||Array.isArray(data))throw Error('セッションJSONが不正です');
-  const source=rawLogs(data);let t=ms(data.session?.startedAt??data.session?.startTime??data.session?.startAt??data.startedAt??data.startTime);
-  if(t===null)for(const x of source){const at=ms(x.timestamp??x.time??x.recordedAt??x.createdAt);if(at!==null)t=t===null?at:Math.min(t,at)}
-  if(t===null)throw Error('セッション開始時刻がありません');
-  const parsed=source.map(x=>{let sec=num(x.sec??x.elapsedSec??x.timeSec??x.seconds??x.offsetSec);if(sec===null){const at=ms(x.timestamp??x.time??x.recordedAt??x.createdAt);if(at!==null)sec=(at-t)/1000}if(sec===null||sec<0)return null;const g=num(x.motionG??x.accelerationG??x.g??x.motion?.g);return{sec,db:num(x.db??x.dB??x.peakDb??x.soundDb??x.soundPressureDb??x.decibel??x.decibels??x.audioDb??x.audio?.db??x.audio?.peakDb),hz:num(x.peakHz??x.hz??x.Hz??x.frequency??x.frequencyHz??x.dominantHz??x.peakFrequency??x.peakFrequencyHz??x.audio?.peakHz??x.audio?.frequencyHz),motion:g===null?null:Math.max(0,g)}}).filter(Boolean).sort((a,b)=>a.sec-b.sec);
-  const parsedBins=rawBins(data).map((b,i)=>{const avg=Math.max(0,num(b.avgMotion,0));return{start:Math.max(0,num(b.startSec,i*30)),length:Math.max(.001,num(b.durationSec,30)),avg,max:Math.max(avg,num(b.maxMotion,avg))}}).sort((a,b)=>a.start-b.start);
-  startMs=t;logs=parsed;bins=parsedBins;clips=[];metadata=clipList(data);duration=Math.max(1,num(data.session?.durationSec??data.durationSec,0),logs.length?logs[logs.length-1].sec+1:0);for(const b of bins)duration=Math.max(duration,b.start+b.length);indexMotion();hasTracker=true;
-  const p=data.patient??data.session?.patient??data.profile??{};
-  $('clinicField').value=p.clinic??p.clinicName??p.facility??'ログから取得';
-  $('chartNoField').value=p.chartNo??p.chartNumber??p.medicalRecordNumber??'ログから取得';
-  $('patientNameField').value=p.name??p.patientName??'ログから取得'
+function pitchDeg(o) {
+  if (o.beta == null) return null;
+  return Math.round((o.beta - 90) * 10) / 10;
 }
-// 非暗号化ZIPの格納/DEFLATE展開（V46のまま）
-function inflate(input,expected){
-  const LB=[3,4,5,6,7,8,9,10,11,13,15,17,19,23,27,31,35,43,51,59,67,83,99,115,131,163,195,227,258],LE=[0,0,0,0,0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,0],DB=[1,2,3,4,5,7,9,13,17,25,33,49,65,97,129,193,257,385,513,769,1025,1537,2049,3073,4097,6145,8193,12289,16385,24577],DE=[0,0,0,0,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10,11,11,12,12,13,13];
-  let pos=0,buffer=0,count=0,used=0;const out=new Uint8Array(expected);
-  function bits(n){while(count<n){if(pos>=input.length)throw Error('ZIP圧縮データが不完全');buffer|=input[pos++]<<count;count+=8}const v=buffer&((1<<n)-1);buffer>>>=n;count-=n;return v}
-  function put(v){if(used>=expected)throw Error('ZIP展開サイズ超過');out[used++]=v}
-  function tree(lengths){const counts=new Uint16Array(16),next=new Uint16Array(16),tables=Array.from({length:16},()=>new Map());let max=0,code=0;for(const n of lengths){if(n>15)throw Error('ZIP符号長が不正');if(n){counts[n]++;max=Math.max(max,n)}}for(let i=1;i<=15;i++){code=(code+counts[i-1])<<1;if(code+counts[i]>(1<<i))throw Error('ZIP符号表が不正');next[i]=code}lengths.forEach((n,s)=>{if(n)tables[n].set(next[n]++,s)});return{tables,max}}
-  function symbol(t){let code=0;for(let n=1;n<=t.max;n++){code=(code<<1)|bits(1);if(t.tables[n].has(code))return t.tables[n].get(code)}throw Error('ZIP Huffman符号が不正')}
-  let final=false;while(!final){final=bits(1)===1;const type=bits(2);if(type===0){if(count%8)bits(count%8);const length=bits(16),inverse=bits(16);if(((length^inverse)&65535)!==65535)throw Error('ZIPブロックが不正');for(let i=0;i<length;i++)put(bits(8));continue}if(type===3)throw Error('ZIPブロック形式が不正');let literal,distance;
-    if(type===1){literal=tree(Array.from({length:288},(_,i)=>i<=143?8:i<=255?9:i<=279?7:8));distance=tree(Array(32).fill(5))}
-    else{const nl=bits(5)+257,nd=bits(5)+1,nc=bits(4)+4,order=[16,17,18,0,8,7,9,6,10,5,11,4,12,3,13,2,14,1,15],lengths=Array(19).fill(0);for(let i=0;i<nc;i++)lengths[order[i]]=bits(3);const ct=tree(lengths),all=[];while(all.length<nl+nd){const v=symbol(ct);if(v<=15)all.push(v);else{let repeat,value;if(v===16){if(!all.length)throw Error('ZIP反復符号が不正');repeat=bits(2)+3;value=all[all.length-1]}else if(v===17){repeat=bits(3)+3;value=0}else{repeat=bits(7)+11;value=0}if(all.length+repeat>nl+nd)throw Error('ZIP符号数が不正');for(let i=0;i<repeat;i++)all.push(value)}}literal=tree(all.slice(0,nl));distance=tree(all.slice(nl))}
-    for(;;){const v=symbol(literal);if(v<256){put(v);continue}if(v===256)break;const li=v-257;if(li<0||li>=LB.length)throw Error('ZIP長さ符号が不正');const length=LB[li]+bits(LE[li]),di=symbol(distance);if(di>=DB.length)throw Error('ZIP距離符号が不正');const dist=DB[di]+bits(DE[di]);if(dist>used)throw Error('ZIPコピー距離が不正');for(let i=0;i<length;i++)put(out[used-dist])}}
-  if(used!==expected)throw Error('ZIP展開サイズ不一致');return out.buffer
-}
-async function unzip(file){
-  const bytes=new Uint8Array(await file.arrayBuffer()),view=new DataView(bytes.buffer),u16=p=>view.getUint16(p,true),u32=p=>view.getUint32(p,true);let end=-1;
-  for(let p=bytes.length-22;p>=Math.max(0,bytes.length-65557);p--)if(u32(p)===0x06054b50&&p+22+u16(p+20)===bytes.length){end=p;break}
-  if(end<0)throw Error('ZIP中央ディレクトリがありません');if(u16(end+4)||u16(end+6))throw Error('分割ZIPは非対応');
-  const count=u16(end+10),offset=u32(end+16);if(count===65535||offset===0xffffffff)throw Error('ZIP64は非対応');
-  const entries=[],decoder=new TextDecoder();let p=offset;
-  for(let i=0;i<count;i++){if(p+46>bytes.length||u32(p)!==0x02014b50)throw Error('ZIP中央ディレクトリが不正');const flags=u16(p+8),method=u16(p+10),compressed=u32(p+20),expanded=u32(p+24),nl=u16(p+28),extra=u16(p+30),comment=u16(p+32),local=u32(p+42);if(p+46+nl+extra+comment>bytes.length)throw Error('ZIPヘッダーが不完全');const name=decoder.decode(bytes.subarray(p+46,p+46+nl));
-    if(!name.endsWith('/')&&/\.(json|wav|webm|mp3|ogg|m4a|mp4|aac)$/i.test(name)){if(flags&1)throw Error('暗号化ZIPは非対応');entries.push({name,async data(){if(local+30>bytes.length||u32(local)!==0x04034b50)throw Error('ZIPローカルヘッダーが不正');const begin=local+30+u16(local+26)+u16(local+28);if(begin+compressed>bytes.length||expanded>268435456)throw Error('ZIPエントリー破損または256MB超');const data=bytes.subarray(begin,begin+compressed);if(method===0){if(compressed!==expanded)throw Error('ZIP格納サイズ不一致');return data.slice().buffer}if(method===8)return inflate(data,expanded);throw Error('未対応ZIP方式: '+method)}})}p+=46+nl+extra+comment}
-  return entries
-}
-const jsonText=text=>JSON.parse(text.replace(/^\uFEFF/,''));
-async function documentsFrom(file,isCurrent){
-  if(/\.json$/i.test(file.name)){const obj=jsonText(await file.text());return isCurrent()?{entries:[],documents:[{name:file.name,obj}]}:null}
-  if(!/\.zip$/i.test(file.name))throw Error('JSONかZIPを選択してください');const entries=await unzip(file),documents=[];
-  for(const e of entries){if(!isCurrent())return null;if(!/\.json$/i.test(e.name))continue;try{documents.push({name:e.name,obj:jsonText(new TextDecoder().decode(await e.data()))})}catch(error){console.warn(e.name,error)}}
-  return isCurrent()?{entries,documents}:null
-}
-// 包絡・最小最大・基準周波数（V46のまま）。buffer は clipAsBuffer() で作った形でよい
-function features(buffer){
-  const channels=Array.from({length:buffer.numberOfChannels},(_,i)=>buffer.getChannelData(i)),mix=i=>{let v=0;for(const c of channels)v+=c[i];return v/channels.length},rate=buffer.sampleRate;
-  const envelope=new Float32Array(Math.ceil(buffer.duration*RATE)),minimum=new Float32Array(Math.ceil(buffer.duration*PEAK_RATE)),maximum=new Float32Array(minimum.length),frequency=new Float32Array(envelope.length);
-  for(let k=0;k<envelope.length;k++){let sum=0;const a=Math.floor(k*rate/RATE),b=Math.min(buffer.length,Math.floor((k+1)*rate/RATE));for(let i=a;i<b;i++){const v=mix(i);sum+=v*v}const rms=b>a?Math.sqrt(sum/(b-a)):0;envelope[k]=clamp(rms>1e-7?20*Math.log10(rms)+72:0,0,60)}
-  for(let k=0;k<minimum.length;k++){let low=1,high=-1;const a=Math.floor(k*rate/PEAK_RATE),b=Math.min(buffer.length,Math.floor((k+1)*rate/PEAK_RATE));for(let i=a;i<b;i++){const v=mix(i);low=Math.min(low,v);high=Math.max(high,v)}minimum[k]=a<b?low:0;maximum[k]=a<b?high:0}
-  const quiet=new Float32Array(envelope.length),block=PEAK_RATE/RATE;for(let k=0;k<quiet.length;k++){let peak=0;for(let i=k*block;i<Math.min((k+1)*block,minimum.length);i++)peak=Math.max(peak,Math.abs(minimum[i]),Math.abs(maximum[i]));quiet[k]=peak}quiet.sort();const noiseFloor=quiet.length?Math.min(.05,quiet[Math.floor((quiet.length-1)*.2)]*1.2):0;
-  const n=2048,real=new Float64Array(n),imag=new Float64Array(n);
-  for(let k=0;k<envelope.length;k++){if(envelope[k]<15)continue;const begin=clamp(Math.round(k*rate/RATE)-n/2,0,Math.max(0,buffer.length-n)),available=Math.min(n,buffer.length-begin);if(available<64)continue;let avg=0;for(let i=0;i<available;i++){real[i]=mix(begin+i);avg+=real[i]}avg/=available;for(let i=0;i<n;i++){real[i]=i<available?(real[i]-avg)*(.5-.5*Math.cos(2*Math.PI*i/(n-1))):0;imag[i]=0}
-    let j=0;for(let i=1;i<n;i++){let bit=n>>1;while(j&bit){j^=bit;bit>>=1}j^=bit;if(i<j){[real[i],real[j]]=[real[j],real[i]];[imag[i],imag[j]]=[imag[j],imag[i]]}}
-    for(let length=2;length<=n;length<<=1){const angle=-2*Math.PI/length,wr=Math.cos(angle),wi=Math.sin(angle);for(let a=0;a<n;a+=length){let r=1,im=0;for(let m=0;m<length/2;m++){const x=a+m,y=x+length/2,tr=real[y]*r-imag[y]*im,ti=real[y]*im+imag[y]*r;real[y]=real[x]-tr;imag[y]=imag[x]-ti;real[x]+=tr;imag[x]+=ti;const nr=r*wr-im*wi;im=r*wi+im*wr;r=nr}}}
-    let bin=-1,power=1e-10;for(let i=Math.max(1,Math.ceil(40*n/rate));i<=Math.min(n/2-1,Math.floor(4000*n/rate));i++){const p=real[i]*real[i]+imag[i]*imag[i];if(p>power){power=p;bin=i}}if(bin>0)frequency[k]=bin*rate/n}
-  return{envelope,minimum,maximum,frequency,noiseFloor}
-}
-// IMA-ADPCM WAV（fmtタグ 0x11）の自前デコード（V46のまま）
-const IMA_STEP = [7,8,9,10,11,12,13,14,16,17,19,21,23,25,28,31,34,37,41,45,50,55,60,66,73,80,88,97,107,118,130,143,157,173,190,209,230,253,279,307,337,371,408,449,494,544,598,658,724,796,876,963,1060,1166,1282,1411,1552,1707,1878,2066,2272,2499,2749,3024,3327,3660,4026,4428,4871,5358,5894,6484,7132,7845,8630,9493,10442,11487,12635,13899,15289,16818,18500,20350,22385,24623,27086,29794,32767];
-const IMA_IDX = [-1, -1, -1, -1, 2, 4, 6, 8];
-const IMA_BLOCK = 256;
-const IMA_SPB = (IMA_BLOCK - 4) * 2 + 1;
-function decodeImaWav(data, wantSamples) {
-  const u8 = data instanceof Uint8Array ? data : new Uint8Array(data.buffer || data);
-  const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
-  let p = 12, blockAlign = IMA_BLOCK, spb = IMA_SPB, dStart = -1, dLen = 0, fact = -1;
-  while (p + 8 <= u8.length) {
-    const id = String.fromCharCode(u8[p], u8[p + 1], u8[p + 2], u8[p + 3]);
-    const sz = dv.getUint32(p + 4, true);
-    if (id === "fmt ") {
-      blockAlign = dv.getUint16(p + 8 + 12, true);
-      spb = sz >= 20 ? dv.getUint16(p + 8 + 18, true) : (blockAlign - 4) * 2 + 1;
-    } else if (id === "fact") {
-      fact = dv.getUint32(p + 8, true);
-    } else if (id === "data") {
-      dStart = p + 8;
-      dLen = Math.min(sz, u8.length - dStart);
-      break;
-    }
-    p += 8 + sz + (sz & 1);
+let sensorAsked = false;
+/* iOS対策：モーションセンサーの許可要求は、タップされた瞬間に直接呼ばないと
+   受け付けられないことがある。そのため要求だけを同期的に発行し、Promiseを返す。 */
+function requestSensorPermission() {
+  if (sensorAsked) return Promise.resolve(true);
+  sensorAsked = true;
+  if (typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function") {
+    return DeviceOrientationEvent.requestPermission()
+      .then((p) => p === "granted")
+      .catch(() => false);
   }
-  if (dStart < 0) throw new Error("音声データの形式を読み取れません");
-  const total = wantSamples || (fact >= 0 ? fact : Math.floor(dLen / blockAlign) * spb);
-  const out = new Int16Array(total);
-  let w = 0;
-  for (let b = 0; b * blockAlign + 4 <= dLen && w < total; b++) {
-    const o = dStart + b * blockAlign;
-    let pred = dv.getInt16(o, true);
-    let idx = clamp(u8[o + 2], 0, 88);
-    out[w++] = pred;
-    for (let i = 4; i < blockAlign && w < total; i++) {
-      const byte = u8[o + i];
-      for (let h = 0; h < 2 && w < total; h++) {
-        const code = (byte >> (h * 4)) & 15;
-        const step = IMA_STEP[idx];
-        let vp = step >> 3;
-        if (code & 4) vp += step;
-        if (code & 2) vp += step >> 1;
-        if (code & 1) vp += step >> 2;
-        pred = clamp(pred + ((code & 8) ? -vp : vp), -32768, 32767);
-        idx = clamp(idx + IMA_IDX[code & 7], 0, 88);
-        out[w++] = pred;
+  return Promise.resolve(true);
+}
+async function finishSensorSetup(granted) {
+  if (!granted) return false;
+  window.addEventListener("deviceorientation", onOrient, true);
+  return true;
+}
+
+/* ===== 権限（最初に取る） ===== */
+const PERMS = { cam: false, sensor: false };
+function updatePermUI() {
+  $("perm-cam").textContent = PERMS.cam ? "OK" : "未取得";
+  $("perm-sensor").textContent = PERMS.sensor ? "OK" : "未取得";
+  $("btn-ocr").disabled = !PERMS.cam;
+  // 直接書き込んだ場合、登録は「ビフォーを撮る」を押した時に行う。登録済みでないと押せない作りは行き止まりになる（V12で修正）。
+  $("btn-start-before").disabled = !PERMS.cam;
+  $("btn-perms").disabled = PERMS.cam && PERMS.sensor;
+}
+async function takePerms() {
+  // iOS対策：センサー許可の要求は、タップの最初に直接発行する（カメラより先）
+  const sensorReq = requestSensorPermission();
+  // カメラ：許可を取るだけ（ストリームはすぐ止める。撮影時に改めて開く）
+  try {
+    const st = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
+    st.getTracks().forEach((t) => t.stop());
+    PERMS.cam = true;
+  } catch (e) {
+    console.warn(e);
+    $("perm-cam").textContent = "許可されませんでした";
+  }
+  // モーションセンサー：許可＋値が実際に来るかまで確認
+  const asked = await finishSensorSetup(await sensorReq);
+  if (asked) {
+    const t0 = Date.now();
+    while (!gotOrientValue && Date.now() - t0 < 1500) {
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    PERMS.sensor = gotOrientValue;
+    if (!PERMS.sensor) $("perm-sensor").textContent = "値が取れませんでした";
+  } else {
+    $("perm-sensor").textContent = "許可されませんでした";
+  }
+  updatePermUI();
+  await renderList();
+  if (PERMS.cam) { toast("権限を取りました"); loadAI(); }
+}
+if (typeof DeviceOrientationEvent === "undefined" || typeof DeviceOrientationEvent.requestPermission !== "function") {
+  window.addEventListener("deviceorientation", onOrient, true);
+}
+
+/* ===== 患者登録（OCR＋手入力） ===== */
+let currentPatient = null;
+let patientFieldSyncId = null;
+async function renderPatients() {
+  const ps = (await DB.all("patients")).sort((a, b) => b.createdAt - a.createdAt);
+  const box = $("patient-list"); box.innerHTML = "";
+  for (const p of ps) {
+    const row = document.createElement("div");
+    row.style.display = "flex"; row.style.gap = "8px"; row.style.margin = "6px 0";
+    const b = document.createElement("button");
+    b.className = "sub"; b.style.flex = "1 1 auto"; b.style.minWidth = "0";
+    b.textContent = (currentPatient && currentPatient.id === p.id ? "● " : "") + p.name + "（No." + p.chartNo + "）";
+    b.onclick = async () => { currentPatient = p; localStorage.setItem("pc-patient", p.id); await renderPatients(); };
+    const del = document.createElement("button");
+    del.className = "sub"; del.textContent = "削除"; del.style.flex = "0 0 auto"; del.style.width = "auto";
+    del.onclick = async () => {
+      if (!confirm(p.name + "（No." + p.chartNo + "）を削除しますか？")) return;
+      await DB.del("patients", p.id);
+      if (currentPatient && currentPatient.id === p.id) {
+        currentPatient = null;
+        localStorage.removeItem("pc-patient");
       }
-    }
+      await renderPatients();
+    };
+    row.appendChild(b); row.appendChild(del);
+    box.appendChild(row);
   }
-  return out;
+  updatePatientUI();
 }
-function wavFmtInfo(data){
-  const u8=data instanceof Uint8Array?data:new Uint8Array(data);
-  if(u8.length<44)return null;
-  if(String.fromCharCode(u8[0],u8[1],u8[2],u8[3])!=='RIFF'||String.fromCharCode(u8[8],u8[9],u8[10],u8[11])!=='WAVE')return null;
-  const dv=new DataView(u8.buffer,u8.byteOffset,u8.byteLength);let p=12;
-  while(p+8<=u8.length){const id=String.fromCharCode(u8[p],u8[p+1],u8[p+2],u8[p+3]),sz=dv.getUint32(p+4,true);
-    if(id==='fmt '&&sz>=16)return{tag:dv.getUint16(p+8,true),channels:dv.getUint16(p+10,true),sampleRate:dv.getUint32(p+12,true)};
-    if(id==='data')break;p+=8+sz+(sz&1)}
-  return null
+function updatePatientUI() {
+  // 患者の表示は入力欄そのものに統一する（別の場所に書かない）。
+  // 選択が変わった時だけ欄へ反映する。手入力の途中では触らない。
+  if (currentPatient && currentPatient.id !== patientFieldSyncId) {
+    $("reg-name").value = currentPatient.name;
+    $("reg-chart").value = currentPatient.chartNo || "";
+    patientFieldSyncId = currentPatient.id;
+  } else if (!currentPatient && patientFieldSyncId) {
+    $("reg-name").value = "";
+    $("reg-chart").value = "";
+    patientFieldSyncId = null;
+  }
+  updatePermUI();
+  renderPatientsSelection();
+  syncOcrBtn();
+}
+// 名前とカルテ番号が両方入っていたら、読み取りボタンは消す（秀司の指示、V12）。
+function syncOcrBtn() {
+  const filled = $("reg-name").value.trim() && $("reg-chart").value.trim();
+  $("btn-ocr").hidden = !!filled;
+}
+function renderPatientsSelection() {
+  // 選択中マークだけ付け直す（再描画は renderPatients が担う）
+}
+async function registerPatient() {
+  const name = $("reg-name").value.trim();
+  const chartNo = $("reg-chart").value.trim();
+  if (!name || !chartNo) { toast("名前とカルテ番号を入れてください"); return; }
+  const all = await DB.all("patients");
+  let p = all.find((x) => x.chartNo === chartNo);
+  if (p) { p.name = name; }
+  else if (currentPatient) { p = currentPatient; p.name = name; p.chartNo = chartNo; }
+  else { p = { id: uid(), name, chartNo, createdAt: Date.now() }; }
+  await DB.put("patients", p);
+  currentPatient = p;
+  localStorage.setItem("pc-patient", p.id);
+  await renderPatients();
+  if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  toast("登録しました");
 }
 
-/* ----- 読込（音声はデコードして数値で保持。AudioContextは使わない） ----- */
-async function loadTracker(file,generation){
-  const current=()=>generation===trackerGeneration&&!disposed;
-  stopPlayback();stopRef();refClip=null;$('refPlayBtn').disabled=true;$('refPlayBtn').textContent='基準音を再生';
-  $('loadStatusBadge').textContent='JSONを解析中…';
-  const result=await documentsFrom(file,current);if(!result||!current())return;
-  const{entries,documents}=result;
-  const candidates=documents.filter(d=>d.obj&&typeof d.obj==='object'&&!Array.isArray(d.obj)&&base(d.name)!=='clips.json'),rank=d=>(base(d.name)==='session.json'?1000000:0)+rawLogs(d.obj).length*2+rawBins(d.obj).length+(d.obj.session||d.obj.startedAt||d.obj.startTime?1000:0);
-  candidates.sort((a,b)=>rank(b)-rank(a));if(!candidates.length)throw Error('セッションJSONがありません');
-  parseTracker(candidates[0].obj);
-  const merged=new Map(),anonymous=[];documents.sort((a,b)=>(base(a.name)==='clips.json')-(base(b.name)==='clips.json'));
-  for(const m of[...metadata,...documents.flatMap(d=>clipList(d.obj))]){const names=clipFiles(m),key=names.length?base(names[0]):m.id!==undefined?'id:'+m.id:null;if(!key){anonymous.push(m);continue}const clean=Object.fromEntries(Object.entries(m).filter(([,v])=>v!==null&&v!==undefined&&v!==''));merged.set(key,{...merged.get(key),...clean})}
-  metadata=[...merged.values(),...anonymous];
-  for(const m of metadata){const s=clipStart(m,clipFiles(m)[0]);if(s!==null)duration=Math.max(duration,s+Math.max(0,num(m.durationSec??m.duration,0)))}
-  center=duration/2;cursor=center;refresh();
-  // 基準音はここで読み込んでおく（再生ボタンでは待たずに鳴らすため）
-  const refFound=entries.find(e=>base(e.name)==='reference.wav');
-  if(refFound){try{const decoded=await decodeClip(await refFound.data());if(!current())return;refClip={rate:decoded.rate,channels:decoded.channels};$('refPlayBtn').disabled=false}catch(error){console.warn('基準音の読込:',error)}}
-  const audio=entries.filter(e=>/\.(wav|webm|mp3|ogg|m4a|mp4|aac)$/i.test(e.name)&&base(e.name)!=='reference.wav');
-  const jsonTotal=entries.length?entries.filter(e=>/\.json$/i.test(e.name)).length:documents.length;
-  const total=jsonTotal+audio.length;let done=jsonTotal;
-  if(!audio.length){$('loadStatusBadge').textContent=`読込完了 ${done}/${Math.max(1,total)} / ログ${logs.length}点 / 音声なし`;return}
-  let next=0,audioDone=0,failed=0,unplaced=0;
-  $('loadStatusBadge').textContent=`読込達成数 ${done}/${total} / 音声 0/${audio.length}`;
-  async function worker(){
-    while(current()){
-      const i=next++;if(i>=audio.length)return;
-      const entry=audio[i];
-      try{
-        const meta=findMeta(entry.name),position=clipStart(meta,entry.name);
-        if(position===null){unplaced++;continue}
-        const data=await entry.data();if(!current())return;
-        const decoded=await decodeClip(data);if(!current())return;
-        clips.push({start:position,length:decoded.channels[0].length/decoded.rate,rate:decoded.rate,channels:decoded.channels,name:entry.name,category:categoryOf(meta),...features(clipAsBuffer(decoded))})
-      }catch(error){
-        if(current()){failed++;console.warn(entry.name,error)}
-      }finally{
-        audioDone++;done++;
-        if(current()){
-          $('loadStatusBadge').textContent=`読込達成数 ${done}/${total} / 音声 ${audioDone}/${audio.length} / 失敗 ${failed} / 時刻不明 ${unplaced}`;
-          if(audioDone%10===0||audioDone===audio.length){clips.sort((a,b)=>a.start-b.start);refresh()}
-          await new Promise(resolve=>setTimeout(resolve,0))
+/* カルテ撮影→OCR。読み取りは端末内（Tesseract）で行う。名前と番号が揃えば、そのまま登録する（V7で登録ボタンを廃止）。 */
+let tesseractLoading = null;
+function loadTesseract() {
+  if (window.Tesseract) return Promise.resolve();
+  if (tesseractLoading) return tesseractLoading;
+  tesseractLoading = new Promise((res, rej) => {
+    const s = document.createElement("script");
+    s.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5.0.5/dist/tesseract.min.js";
+    s.onload = res; s.onerror = rej;
+    document.head.appendChild(s);
+  });
+  return tesseractLoading;
+}
+function parseChartText(text) {
+  const lines = String(text).split(/\n/).map((l) => l.trim()).filter(Boolean);
+  let chartNo = "";
+  const m = text.match(/(?:No\.?|番号|カルテ|ID)[:：\s]*([0-9][0-9\-]{2,})/i);
+  if (m) chartNo = m[1].replace(/-/g, "");
+  if (!chartNo) {
+    const nums = text.match(/[0-9]{4,}/g);
+    if (nums) chartNo = nums.sort((a, b) => b.length - a.length)[0];
+  }
+  let name = "";
+  const nm = text.match(/(?:氏名|名前|患者名)[:：\s]*([^\n\d]{2,})/);
+  if (nm) name = nm[1].trim();
+  if (!name) {
+    const cand = lines.filter((l) => /[ぁ-んァ-ヶ一-龥]/.test(l) && !/(カルテ|番号|氏名|名前|患者|診療|歯科|医院|様式|No)/i.test(l))
+      .sort((a, b) => b.length - a.length)[0];
+    if (cand) name = cand.replace(/[\s　]+/g, "");
+  }
+  name = name.replace(/様$/, "").trim();
+  return { name, chartNo };
+}
+async function runOcr(canvas) {
+  toast("読み取っています…", 6000);
+  try {
+    await loadTesseract();
+    const { data } = await window.Tesseract.recognize(canvas, "jpn");
+    const r = parseChartText(data.text || "");
+    if (r.name) $("reg-name").value = r.name;
+    if (r.chartNo) $("reg-chart").value = r.chartNo;
+    if (r.name && r.chartNo) {
+      await registerPatient();
+    } else {
+      toast(r.name || r.chartNo ? "一部だけ読み取りました。足りない欄を入れてください" : "読み取れませんでした");
+    }
+  } catch (e) {
+    console.warn(e);
+    toast("読み取れませんでした");
+  }
+}
+
+/* ===== AI（後から読み込む。失敗しても撮影はできる） ===== */
+let MP = null, pose = null, seg = null, aiState = "";
+let lastPoseTs = 0;
+let aiLoading = null;
+async function loadAI() {
+  if (pose && seg) return;
+  if (aiLoading) return aiLoading;
+  aiState = "姿勢ポイント準備中…";
+  aiLoading = (async () => {
+    let vision = null;
+    try {
+      if (!MP) {
+        try { MP = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs"); }
+        catch (e) { MP = await import("https://unpkg.com/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs"); }
+      }
+      vision = await MP.FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm");
+    } catch (e) {
+      console.warn("AI土台の読込:", e);
+      aiState = "姿勢ポイントは使えません";
+      aiLoading = null;
+      return;
+    }
+    // 骨格と輪郭は別々に作る。片方が失敗しても、もう片方を巻き込まない（V17）。
+    try {
+      if (!pose) {
+        const poseOpts = (delegate) => ({
+          baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task", delegate },
+          runningMode: "VIDEO", numPoses: 1
+        });
+        try { pose = await MP.PoseLandmarker.createFromOptions(vision, poseOpts("GPU")); }
+        catch (e) {
+          console.warn("GPUで姿勢解析を作れず、CPUで再試行:", e);
+          try { pose = await MP.PoseLandmarker.createFromOptions(vision, poseOpts("CPU")); }
+          catch (e2) { console.warn("姿勢解析の作成に失敗:", e2); }
         }
       }
-    }
-  }
-  await Promise.all(Array.from({length:Math.min(2,audio.length)},worker));
-  if(!current())return;
-  clips.sort((a,b)=>a.start-b.start);refresh();
-  $('loadStatusBadge').textContent=`読込完了 ${done}/${total} / ログ${logs.length}点 / 配置${clips.length}本 / 時刻不明${unplaced}本 / 失敗${failed}本`
-}
-
-/* ----- Fitbit（V46のまま） ----- */
-function stage(v){const s=String(v||'').toLowerCase();return['deep','light','rem'].includes(s)?s:/^(wake|awake)$/.test(s)?'wake':null}
-function timeValue(target,t,v,low,high){const at=ms(t),value=num(v);if(at!==null&&value!==null&&value>=low&&value<=high)target.push({at,value})}
-function fitbitObject(target,object,name=''){
-  if(Array.isArray(object)){for(const item of object)fitbitObject(target,item,name);return}if(!object||typeof object!=='object')return;
-  for(const r of Array.isArray(object.sleep)?object.sleep:[object]){if(!r||typeof r!=='object')continue;const score=num(r.sleepScore?.overallScore??r.sleepScore?.score??r.sleepScore??r.score);if(score!==null&&score>=0&&score<=100&&(r.levels||r.sleepScore||/score/i.test(name)))target.score=score;for(const x of Array.isArray(r.levels?.data)?r.levels.data:[]){const at=ms(x.dateTime??x.datetime??x.startTime),length=num(x.seconds),level=stage(x.level);if(at!==null&&length>0&&level)target.stages.push({start:at,end:at+length*1000,level})}}
-  for(const array of[object.bpm,object.heartRate,object['heart-rate']].filter(Array.isArray))for(const x of array)timeValue(target.bpm,x.dateTime??x.datetime??x.timestamp,x.value?.bpm??x.value?.heartRate??x.value,25,240);
-  for(const array of[object.spo2,object.SpO2,object['Oxygen Saturation']].filter(Array.isArray))for(const x of array)timeValue(target.spo2,x.dateTime??x.datetime??x.timestamp,x.value?.spo2??x.value?.SpO2??x.value,50,100);
-  if(/heart|bpm/i.test(name))timeValue(target.bpm,object.dateTime??object.datetime??object.timestamp,object.value?.bpm??object.value?.heartRate??object.bpm??object.value,25,240);
-  if(/spo2|oxygen/i.test(name))timeValue(target.spo2,object.dateTime??object.datetime??object.timestamp,object.value?.spo2??object.value?.SpO2??object.value,50,100);
-  if(/spo2|oxygen/i.test(name)||object.spo2||object.SpO2){const r=object.value&&typeof object.value==='object'&&!Array.isArray(object.value)?object.value:object,min=num(r.minimum??r.min),max=num(r.maximum??r.max);if(min!==null&&max!==null&&min>=50&&max<=100&&min<=max)target.spo2Range=target.spo2Range?{min:Math.min(min,target.spo2Range.min),max:Math.max(max,target.spo2Range.max)}:{min,max}}
-  const temp=object.temperature??object['Relative Sleep Skin Temperature'];if(Array.isArray(temp))for(const x of temp)timeValue(target.temperature,x.dateTime??x.datetime,x.value?.nightlyRelative??x.value,-20,20)
-}
-function normalizeFitbit(){for(const k of['bpm','spo2','temperature']){const unique=new Map(fitbit[k].map(x=>[x.at,x]));fitbit[k]=[...unique.values()].sort((a,b)=>a.at-b.at)}const unique=new Map(fitbit.stages.map(x=>[`${x.start}:${x.end}:${x.level}`,x]));fitbit.stages=[...unique.values()].sort((a,b)=>a.start-b.start);$('fitbitStatus').textContent=`段階${fitbit.stages.length} / 心拍${fitbit.bpm.length} / SpO₂${fitbit.spo2.length}`;requestDraw();report()}
-async function loadFitbit(files,generation){const current=()=>generation===fitbitGeneration&&!disposed;$('fitbitStatus').textContent='解析中…';const target=emptyFitbit();for(const file of files){const result=await documentsFrom(file,current);if(!result||!current())return;for(const d of result.documents){fitbitObject(target,d.obj,d.name);target.sourceCount++}}if(!current())return;fitbit=target;normalizeFitbit()}
-
-/* ----- 再生（すべて同期。再生ボタンのクリック処理の中で呼ぶ。途中でawaitしない） ----- */
-function stopSources(){for(const source of sources){try{source.stop()}catch(_){}try{source.disconnect()}catch(_){}}sources=[]}
-function stopPlayback(message='待機中'){currentCursor();playGeneration++;playing=preparing=false;cancelAnimationFrame(playFrame);playFrame=0;stopSources();if(!disposed){$('audioStatusText').textContent=message;updateLines()}}
-function schedule(s){
-  stopPlayback();
-  const start=Math.max(0,clamp(s,intervalStart,intervalEnd)),end=Math.min(duration,intervalEnd);
-  cursor=clamp(start,intervalStart,intervalEnd);
-  if(end-start<=.05){stopPlayback('再生できる区間がありません');return}
-  const targets=clips.filter(c=>c.start+c.length>start&&c.start<end);
-  if(!targets.length){stopPlayback('この区間に音声はありません');return}
-  // 同期的に音声を有効化して、その場で開始する（await しない）
-  const context=unlockAudioSync();
-  const baseTime=context.currentTime+.05;
-  anchorSec=start;anchorTime=baseTime;
-  for(const clip of targets){
-    const offset=Math.max(0,start-clip.start),when=baseTime+Math.max(0,clip.start-start),length=Math.min(clip.length-offset,end-Math.max(start,clip.start));
-    if(length<=0)continue;
-    const source=context.createBufferSource();
-    source.buffer=toAudioBuffer(context,clip);
-    source.connect(context.destination);
-    sources.push(source);
-    source.start(when,offset,length)
-  }
-  if(!sources.length){stopPlayback('再生できる音声がありません');return}
-  playing=true;preparing=false;
-  $('audioStatusText').textContent='再生中・黄色線をドラッグ可能';
-  updateLines();
-  const generation=playGeneration;
-  const tick=()=>{
-    if(generation!==playGeneration||!playing)return;
-    currentCursor();
-    if(cursor>=end-.01){cursor=end;stopPlayback('再生終了');return}
-    showHead();
-    playFrame=requestAnimationFrame(tick)
-  };
-  tick()
-}
-function stopRef(){
-  refGeneration++;refPreparing=false;
-  if(refSource){
-    try{refSource.stop()}catch(_){}
-    try{refSource.disconnect()}catch(_){}
-    refSource=null
-  }
-  const b=$('refPlayBtn');if(b)b.textContent='基準音を再生'
-}
-function playRef(){
-  if(!refClip)return;
-  if(refSource){stopRef();$('audioStatusText').textContent='基準音を停止';return}
-  if(playing||preparing)stopPlayback('基準音のため区間再生を停止');
-  const context=unlockAudioSync();
-  try{
-    const source=context.createBufferSource();
-    source.buffer=toAudioBuffer(context,refClip);
-    source.connect(context.destination);
-    source.onended=()=>{
-      if(refSource===source){
-        try{source.disconnect()}catch(_){}
-        refSource=null;
-        $('refPlayBtn').textContent='基準音を再生';
-        $('audioStatusText').textContent='基準音の再生終了'
+      aiState = pose ? "" : "姿勢ポイントは使えません";
+      if (!seg) {
+        // 輪郭用はGPUで作れなかったらCPUでも試す（片方だけ試して諦める作りだったのが、輪郭なしの原因候補）。
+        const segOpts = (delegate) => ({
+          baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/1/selfie_segmenter.tflite", delegate },
+          runningMode: "IMAGE", outputCategoryMask: true, outputConfidenceMasks: false
+        });
+        try { seg = await MP.ImageSegmenter.createFromOptions(vision, segOpts("GPU")); }
+        catch (e) {
+          console.warn("GPUで輪郭用AIを作れず、CPUで再試行:", e);
+          try { seg = await MP.ImageSegmenter.createFromOptions(vision, segOpts("CPU")); }
+          catch (e2) { console.warn("輪郭用AI読込:", e2); }
+        }
       }
+    } catch (e) {
+      console.warn("AI読込:", e);
+      if (!pose) aiState = "姿勢ポイントは使えません";
+    }
+    aiLoading = null;
+  })();
+  return aiLoading;
+}
+
+function contourFromMask(mask, w, h) {
+  let cx = 0, cy = 0, n = 0;
+  for (let y = 0; y < h; y += 2) for (let x = 0; x < w; x += 2) {
+    if (mask[y * w + x] > 0) { cx += x; cy += y; n++; }
+  }
+  if (n < w * h * 0.02) return null;
+  cx /= n; cy /= n;
+  const RAYS = 180, pts = [];
+  for (let i = 0; i < RAYS; i++) {
+    const a = (i / RAYS) * Math.PI * 2, dx = Math.cos(a), dy = Math.sin(a);
+    let last = null;
+    for (let r = 0; r < Math.max(w, h); r += 2) {
+      const x = Math.round(cx + dx * r), y = Math.round(cy + dy * r);
+      if (x < 0 || y < 0 || x >= w || y >= h) break;
+      if (mask[y * w + x] > 0) last = [x / w, y / h];
+    }
+    if (last) pts.push(last);
+  }
+  if (pts.length < RAYS * 0.6) return null;
+  return pts.map((p, i) => {
+    const q = pts[(i + 1) % pts.length], r = pts[(i + pts.length - 1) % pts.length];
+    return [(p[0] + q[0] + r[0]) / 3, (p[1] + q[1] + r[1]) / 3];
+  });
+}
+async function extractContour(canvas) {
+  // 輪郭用のAIがまだ来ていない時は、ここで読み込みを待ってから取る（黙って「輪郭なし」にしない）。
+  if (!seg) { try { await loadAI(); } catch (e) { /* 取れなければ null */ } }
+  if (!seg) return null;
+  try {
+    const sc = Math.min(1, 640 / canvas.width);
+    const c = document.createElement("canvas");
+    c.width = Math.round(canvas.width * sc); c.height = Math.round(canvas.height * sc);
+    c.getContext("2d").drawImage(canvas, 0, 0, c.width, c.height);
+    const result = seg.segment(c);
+    if (!result || !result.categoryMask) return null;
+    return contourFromMask(result.categoryMask.getAsUint8Array(), result.categoryMask.width, result.categoryMask.height);
+  } catch (e) { console.warn("輪郭:", e); return null; }
+}
+
+/* ===== 撮影 ===== */
+const S = {
+  mode: null, patient: "", baseSetId: null, basePhotos: {},
+  step: 0, shots: [], stream: null, video: null, raf: 0,
+  landmarks: null, facing: "environment", busy: false, gridMode: 0
+};
+function coverTransform(vw, vh, cw, ch) {
+  const s = Math.max(cw / vw, ch / vh);
+  return { s, ox: (cw - vw * s) / 2, oy: (ch - vh * s) / 2 };
+}
+async function startCamera() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    throw new Error("no-camera-api");
+  }
+  if (!S.video) {
+    S.video = document.createElement("video");
+    S.video.playsInline = true; S.video.muted = true;
+    S.video.style.cssText = "position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;";
+    $("cam-wrap").appendChild(S.video);
+  }
+  // 端末によっては希望サイズ付きだと開けないことがあるので、素の指定へ順に落とす。
+  const tries = [
+    { video: { facingMode: S.facing, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false },
+    { video: { facingMode: S.facing }, audio: false },
+    { video: true, audio: false }
+  ];
+  let lastErr = null;
+  for (const c of tries) {
+    try { S.stream = await navigator.mediaDevices.getUserMedia(c); lastErr = null; break; }
+    catch (e) { lastErr = e; }
+  }
+  if (!S.stream) throw lastErr || new Error("camera-failed");
+  S.video.srcObject = S.stream;
+  try { await S.video.play(); } catch (e) { /* 描画側で再試行する */ }
+  requestAnimationFrame(drawLoop);
+}
+function stopCamera() {
+  cancelAnimationFrame(S.raf);
+  if (S.stream) S.stream.getTracks().forEach((t) => t.stop());
+  S.stream = null;
+}
+function drawLoop() {
+  S.raf = requestAnimationFrame(drawLoop);
+  const v = S.video, cv = $("cam-canvas");
+  if (!v || v.readyState < 2) return;
+  const cw = Math.round(cv.clientWidth * devicePixelRatio), ch = Math.round(cv.clientHeight * devicePixelRatio);
+  if (cv.width !== cw || cv.height !== ch) { cv.width = cw; cv.height = ch; }
+  const ctx = cv.getContext("2d");
+  const vw = v.videoWidth, vh = v.videoHeight;
+  const { s, ox, oy } = coverTransform(vw, vh, cw, ch);
+  ctx.fillStyle = "#000"; ctx.fillRect(0, 0, cw, ch);
+  ctx.drawImage(v, ox, oy, vw * s, vh * s);
+
+  // 画角を決めるための格子（撮影画面に重ねるだけ。写真には焼き込まない）。AI不要で常に出る。
+  if (S.gridMode > 0) {
+    const divs = S.gridMode === 1 ? 12 : 6;
+    ctx.strokeStyle = "rgba(255,255,255,0.30)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 1; i < divs; i++) {
+      const gx = Math.round(cw * i / divs) + 0.5, gy = Math.round(ch * i / divs) + 0.5;
+      ctx.moveTo(gx, 0); ctx.lineTo(gx, ch);
+      ctx.moveTo(0, gy); ctx.lineTo(cw, gy);
+    }
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(255,213,74,0.65)";
+    ctx.beginPath();
+    ctx.moveTo(Math.round(cw / 2) + 0.5, 0); ctx.lineTo(Math.round(cw / 2) + 0.5, ch);
+    ctx.stroke();
+  }
+
+  if (pose) {
+    try {
+      const nowTs = performance.now();
+      if (nowTs > lastPoseTs) {
+        lastPoseTs = nowTs;
+        const r = pose.detectForVideo(v, nowTs);
+        S.landmarks = (r && r.landmarks && r.landmarks[0]) || null;
+      }
+    } catch (e) { S.landmarks = null; }
+  }
+  if (S.landmarks && MP) {
+    ctx.strokeStyle = "rgba(64,200,255,.9)"; ctx.fillStyle = "rgba(255,220,64,.95)";
+    ctx.lineWidth = Math.max(2, cw * 0.004);
+    const P = (p) => [ox + p.x * vw * s, oy + p.y * vh * s];
+    const CONN = MP.PoseLandmarker.POSE_CONNECTIONS ||
+      [[11,12],[11,13],[13,15],[12,14],[14,16],[11,23],[12,24],[23,24],[23,25],[24,26],[25,27],[26,28],[0,11],[0,12]].map(([a, b]) => ({ start: a, end: b }));
+    ctx.beginPath();
+    for (const c of CONN) {
+      const a = S.landmarks[c.start], b = S.landmarks[c.end];
+      if (!a || !b) continue;
+      const [ax, ay] = P(a), [bx, by] = P(b);
+      ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
+    }
+    ctx.stroke();
+    for (const p of S.landmarks) {
+      const [x, y] = P(p);
+      ctx.beginPath(); ctx.arc(x, y, Math.max(3.5, cw * 0.007), 0, Math.PI * 2); ctx.fill();
+    }
+  }
+
+  const base = S.mode === "after" ? S.basePhotos[DIRS[S.step]] : null;
+  if (base && base.contour && base.contour.length > 2) {
+    const bw = base.w || vw, bh = base.h || vh;
+    const t2 = coverTransform(bw, bh, cw, ch);
+    ctx.strokeStyle = "rgba(255,120,160,.95)";
+    ctx.lineWidth = Math.max(2.5, cw * 0.006);
+    ctx.beginPath();
+    base.contour.forEach((p, i) => {
+      const x = t2.ox + p[0] * bw * t2.s, y = t2.oy + p[1] * bh * t2.s;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.closePath(); ctx.stroke();
+  }
+
+  const t = tiltDeg(orient);
+  let info = "傾き " + (t == null ? "—" : t.toFixed(1) + "°") + (aiState ? "　" + aiState : "");
+  // アフター撮影で、その方向のビフォー輪郭が無い時は画面に出す（黙って何も出ない形にしない）。
+  if (S.mode === "after") {
+    const bp = S.basePhotos[DIRS[S.step]];
+    if (!bp || !bp.contour) info += "　輪郭なし";
+  }
+  $("cam-info").textContent = info;
+}
+
+async function beginShoot(mode, baseSetId, patientObj) {
+  if (!PERMS.cam) { toast("先に権限を取ってください"); return; }
+  S.mode = mode; S.baseSetId = baseSetId || null;
+  S.patientObj = patientObj || null;
+  S.patient = patientObj ? patientObj.name : "";
+  S.step = 0; S.shots = []; S.landmarks = null; S.basePhotos = {};
+  if (mode === "after" && baseSetId) {
+    const ps = await DB.bySet(baseSetId);
+    for (const p of ps) S.basePhotos[p.dir] = p;
+  }
+  $("page-top").hidden = true; $("page-detail").hidden = true;
+  $("cam-wrap").hidden = false;
+  updateCamDir();
+  try {
+    await startCamera();
+  } catch (e) {
+    console.warn(e);
+    cancelShoot();
+    const el = $("cam-err");
+    if (el) el.textContent = "カメラを開けませんでした（" + (e && (e.name || e.message) || e) + "）";
+    return;
+  }
+  loadAI();
+}
+function updateCamDir() {
+  if (S.mode === "ocr") {
+    $("cam-dir").textContent = "カルテの名前と番号を写す";
+    $("btn-cam-finish").disabled = true;
+    return;
+  }
+  $("cam-dir").textContent = (S.step + 1) + " / 4　" + DIR_JA[DIRS[S.step]] + (S.mode === "after" ? "（アフター）" : "（ビフォー）");
+  $("btn-cam-finish").disabled = S.shots.length === 0;
+}
+function cancelShoot() {
+  stopCamera();
+  $("cam-wrap").hidden = true;
+  $("page-top").hidden = false;
+}
+async function nextStep() {
+  S.step++;
+  if (S.step >= 4) { await finishShoot(); return; }
+  updateCamDir();
+}
+async function takePhoto() {
+  if (S.busy || !S.video || S.video.readyState < 2) return;
+  S.busy = true;
+  try {
+    const v = S.video;
+    const c = document.createElement("canvas");
+    c.width = v.videoWidth; c.height = v.videoHeight;
+    c.getContext("2d").drawImage(v, 0, 0);
+    if (S.mode === "ocr") {
+      stopCamera();
+      $("cam-wrap").hidden = true;
+      $("page-top").hidden = false;
+      await runOcr(c);
+      return;
+    }
+    S.shots.push({
+      dir: DIRS[S.step], canvas: c,
+      tilt: tiltDeg(orient), pitch: pitchDeg(orient),
+      alpha: orient.alpha, beta: orient.beta, gamma: orient.gamma
+    });
+    toast(DIR_JA[DIRS[S.step]] + "を撮りました");
+    await nextStep();
+  } finally { S.busy = false; }
+}
+async function finishShoot() {
+  if (!S.shots.length) { cancelShoot(); return; }
+  stopCamera();
+  $("cam-wrap").hidden = true;
+  toast("保存しています…", 4000);
+  const setId = uid();
+  await DB.put("sets", {
+    id: setId,
+    patientId: S.patientObj ? S.patientObj.id : null,
+    patient: S.patient || "（名前なし）",
+    chartNo: S.patientObj ? S.patientObj.chartNo : "",
+    kind: S.mode,
+    baseSetId: S.baseSetId, createdAt: Date.now(), appVersion: APP_VERSION
+  });
+  let contourMiss = false;
+  for (const shot of S.shots) {
+    let contour = null;
+    if (S.mode === "before") { contour = await extractContour(shot.canvas); if (!contour) contourMiss = true; }
+    const blob = await new Promise((res) => shot.canvas.toBlob(res, "image/jpeg", 0.92));
+    await DB.put("photos", {
+      id: uid(), setId, dir: shot.dir, blob,
+      w: shot.canvas.width, h: shot.canvas.height,
+      tilt: shot.tilt, pitch: shot.pitch,
+      alpha: shot.alpha, beta: shot.beta, gamma: shot.gamma, contour
+    });
+  }
+  // 輪郭が取れなかった時は、その場で言う（後から詳細で気付く形にしない）。
+  if (S.mode === "before" && contourMiss) toast("保存しました（輪郭は取れませんでした）", 4000);
+  else toast("保存しました");
+  $("page-top").hidden = false;
+  await renderList();
+}
+
+/* ===== 一覧・詳細 ===== */
+let currentSet = null, currentPhotos = [];
+async function renderList() {
+  const sets = (await DB.all("sets")).sort((a, b) => b.createdAt - a.createdAt);
+  const box = $("set-list"); box.innerHTML = "";
+  $("list-empty").style.display = sets.length ? "none" : "";
+  const area = $("after-area"); area.innerHTML = "";
+  for (const s of sets) {
+    const d = new Date(s.createdAt);
+    const when = (d.getMonth() + 1) + "/" + d.getDate() + " " + String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+    const b = document.createElement("button");
+    b.className = "set-item";
+    b.innerHTML = "<b>" + escapeHtml(s.patient) + "</b>" + (s.chartNo ? "　<span class='muted'>No." + escapeHtml(s.chartNo) + "</span>" : "") + "　<span class='tag'>" + (s.kind === "before" ? "ビフォー" : "アフター") + "</span>　<span class='muted'>" + when + "</span>";
+    b.onclick = () => openDetail(s.id);
+    box.appendChild(b);
+    if (s.kind === "before") {
+      const ab = document.createElement("button");
+      ab.textContent = "アフターを撮る（" + s.patient + "）";
+      ab.disabled = !PERMS.cam;
+      ab.onclick = () => beginShoot("after", s.id, { id: s.patientId, name: s.patient, chartNo: s.chartNo || "" });
+      area.appendChild(ab);
+    }
+  }
+}
+function correctedCanvas(img, tilt) {
+  const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+  const ang = -(tilt || 0) * Math.PI / 180;
+  const t = Math.abs(ang), cos = Math.cos(t), sin = Math.sin(t);
+  const rot = document.createElement("canvas");
+  rot.width = Math.round(w * cos + h * sin); rot.height = Math.round(w * sin + h * cos);
+  const rctx = rot.getContext("2d");
+  rctx.translate(rot.width / 2, rot.height / 2); rctx.rotate(ang);
+  rctx.drawImage(img, -w / 2, -h / 2);
+  // 回転で生じる余白（隅の欠け）を切り落とし、中に収まる最大の長方形に整える
+  let cw = w, ch = h;
+  const det = cos * cos - sin * sin;
+  if (sin > 0.0001 && det > 0.2) {
+    const x = ((w / 2) * cos - (h / 2) * sin) / det;
+    const y = ((h / 2) * cos - (w / 2) * sin) / det;
+    if (x > 10 && y > 10) { cw = Math.floor(2 * x); ch = Math.floor(2 * y); }
+  }
+  const out = document.createElement("canvas");
+  out.width = cw; out.height = ch;
+  out.getContext("2d").drawImage(rot, (rot.width - cw) / 2, (rot.height - ch) / 2, cw, ch, 0, 0, cw, ch);
+  return out;
+}
+function downloadBlob(blob, name) {
+  const a = document.createElement("a");
+  const url = URL.createObjectURL(blob);
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
+function fileBase() {
+  const d = new Date(currentSet.createdAt);
+  return "posture_" + d.getFullYear() + String(d.getMonth() + 1).padStart(2, "0") + String(d.getDate()).padStart(2, "0") + "_" + currentSet.kind;
+}
+async function openDetail(setId) {
+  currentSet = await DB.get("sets", setId);
+  if (!currentSet) return;
+  currentPhotos = (await DB.bySet(setId)).sort((a, b) => DIRS.indexOf(a.dir) - DIRS.indexOf(b.dir));
+  $("page-top").hidden = true;
+  $("page-detail").hidden = false;
+  $("detail-title").textContent = currentSet.patient + (currentSet.chartNo ? "（No." + currentSet.chartNo + "）" : "") + "（" + (currentSet.kind === "before" ? "ビフォー" : "アフター") + "）";
+
+  const note = $("pitch-note");
+  note.hidden = true;
+  if (currentSet.kind === "after" && currentSet.baseSetId) {
+    const basePhotos = await DB.bySet(currentSet.baseSetId);
+    const diffs = currentPhotos.filter((p) => {
+      const b = basePhotos.find((x) => x.dir === p.dir);
+      return b && p.pitch != null && b.pitch != null && Math.abs(p.pitch - b.pitch) >= 5;
+    }).map((p) => DIR_JA[p.dir]);
+    if (diffs.length) {
+      note.textContent = "注意：上下の傾きがビフォーと違う写真があります（" + diffs.join("、") + "）";
+      note.hidden = false;
+    }
+  }
+
+  // 対のセット（ビフォー⇔アフター）があれば、方向ごとに左右に並べて見せる（V18）。
+  let pairSet = null, pairPhotos = [];
+  if (currentSet.kind === "after" && currentSet.baseSetId) {
+    pairSet = await DB.get("sets", currentSet.baseSetId);
+  } else if (currentSet.kind === "before") {
+    const cands = (await DB.all("sets")).filter((s) => s.baseSetId === currentSet.id).sort((a, b) => b.createdAt - a.createdAt);
+    if (cands.length) pairSet = cands[0];
+  }
+  if (pairSet) {
+    pairPhotos = (await DB.bySet(pairSet.id)).sort((a, b) => DIRS.indexOf(a.dir) - DIRS.indexOf(b.dir));
+    $("detail-title").textContent = currentSet.patient + (currentSet.chartNo ? "（No." + currentSet.chartNo + "）" : "") + "（ビフォーとアフター）";
+  }
+  const beforePhotos = currentSet.kind === "before" ? currentPhotos : pairPhotos;
+  const afterPhotos = currentSet.kind === "after" ? currentPhotos : pairPhotos;
+  const beforeSet = currentSet.kind === "before" ? currentSet : pairSet;
+  const afterSet = currentSet.kind === "after" ? currentSet : pairSet;
+  const entries = [];
+  if (pairSet) {
+    for (const dir of DIRS) {
+      const b = beforePhotos.find((x) => x.dir === dir) || null;
+      const a = afterPhotos.find((x) => x.dir === dir) || null;
+      if (!b && !a) continue;
+      entries.push(b ? { p: b, kind: "before", set: beforeSet } : null);
+      entries.push(a ? { p: a, kind: "after", set: afterSet } : null);
+    }
+  } else {
+    for (const p of currentPhotos) entries.push({ p, kind: currentSet.kind, set: currentSet });
+  }
+
+  const box = $("detail-thumbs"); box.innerHTML = "";
+  for (const entry of entries) {
+    if (!entry) { box.appendChild(document.createElement("div")); continue; }
+    const p = entry.p;
+    const fig = document.createElement("figure");
+    const url = URL.createObjectURL(p.blob);
+    const img = new Image();
+    img.onload = () => {
+      const cv = correctedCanvas(img, p.tilt);
+      cv.style.width = "100%"; cv.style.borderRadius = "8px"; cv.style.display = "block"; cv.style.background = "#000";
+      fig.insertBefore(cv, fig.firstChild);
+      URL.revokeObjectURL(url);
     };
-    refSource=source;
-    source.start(0);
-    $('refPlayBtn').textContent='基準音を停止';
-    $('audioStatusText').textContent='基準音を再生中'
-  }catch(error){
-    stopRef();
-    $('audioStatusText').textContent='基準音の再生失敗: '+error.message;
-    console.error(error)
+    img.src = url;
+    const cap = document.createElement("figcaption");
+    cap.textContent = (pairSet ? (entry.kind === "before" ? "ビフォー　" : "アフター　") : "") +
+      DIR_JA[p.dir] + "　傾き " + (p.tilt == null ? "—" : p.tilt.toFixed(1) + "°") +
+      "　上下 " + (p.pitch == null ? "—" : p.pitch.toFixed(1) + "°") +
+      (entry.kind === "before" ? (p.contour ? "　輪郭あり" : "　輪郭なし") : "");
+    fig.appendChild(cap);
+    const dl = document.createElement("button");
+    dl.className = "sub"; dl.textContent = "書き出す（補正済み）";
+    dl.onclick = () => {
+      const img2 = new Image();
+      const u2 = URL.createObjectURL(p.blob);
+      img2.onload = () => {
+        const d2 = new Date(entry.set.createdAt);
+        const base = "posture_" + d2.getFullYear() + String(d2.getMonth() + 1).padStart(2, "0") + String(d2.getDate()).padStart(2, "0") + "_" + entry.set.kind;
+        correctedCanvas(img2, p.tilt).toBlob((b2) => { downloadBlob(b2, base + "_" + p.dir + ".jpg"); URL.revokeObjectURL(u2); }, "image/jpeg", 0.92);
+      };
+      img2.src = u2;
+    };
+    fig.appendChild(dl);
+    box.appendChild(fig);
   }
-}
-function seekBy(delta){
-  if(preparing||gesture||trackerLoading)return;
-  const resume=playing,next=clamp(currentCursor()+delta,intervalStart,intervalEnd);
-  if(resume){
-    if(next>=intervalEnd-.01){stopPlayback('再生終了');cursor=next;showHead()}
-    else schedule(next)
-  }else{cursor=next;showHead()}
 }
 
-function secToY(s){return(s-windowStart())/span*canvas.height}
-function windowStart(){return center-span/2}
-function yToSec(y){return windowStart()+y/Math.max(1,canvas.height)*span}
-function columns(){const w=canvas.width;return{ml:w*.01,mw:w*.15,sl:w*.16,sw:w*.44,t:w*.60,spo:w*.72,bpm:w*.82,stage:w*.92}}
-function line(x,y,x2,y2,color='#cbd5e1',width=1){ctx.strokeStyle=color;ctx.lineWidth=width;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x2,y2);ctx.stroke()}
-function motionMax(){return motionSetting==='auto'?SCALES.find(v=>motionPeak<=v)||Math.max(.2,motionPeak):Number(motionSetting)}
-const motionX=(v,max,c)=>c.ml+clamp(num(v,0),0,max)/max*c.mw,motionLabel=v=>Number(v.toPrecision(3))+'G';
-function ticks(start,end,c){
-  const step=span<=60?5:span<=300?15:span<=600?30:span<=1800?120:300;
-  ctx.font='10px monospace';
-  for(let s=Math.ceil(start/step)*step;s<=end;s+=step){
-    const y=secToY(s);line(c.t+2,y,c.t+10,y,'#94a3b8');
-    if(step<60?Math.round(s)%60===0:Math.round(s)%(step*2)===0){ctx.fillStyle='#475569';ctx.fillText(clock(s),c.t+12,y+3)}
-  }
-  const midnight=new Date(startMs+start*1000);midnight.setHours(24,0,0,0);
-  while(midnight.getTime()<=startMs+end*1000){
-    const y=secToY((midnight.getTime()-startMs)/1000);
-    ctx.setLineDash([5,4]);line(0,y,canvas.width,y,'#f59e0b');ctx.setLineDash([]);
-    ctx.fillStyle='#92400e';ctx.fillText(datetime((midnight.getTime()-startMs)/1000),Math.max(0,canvas.width-160),Math.max(12,y-4));
-    midnight.setDate(midnight.getDate()+1)
-  }
-}
-function motionGraph(start,end,c,max){
-  let previous=null;
-  if(motionPoints.length){
-    for(const item of motionPoints){
-      const s=item.sec+motionOffset;if(s<start)continue;if(s>end)break;
-      const y=secToY(s),x=motionX(item.motion,max,c);
-      if(motionMode!=='bar'&&previous&&s-previous.s<=2)line(previous.x,previous.y,x,y,'#2563eb',1.3);
-      if(motionMode!=='line')line(c.ml,y,x,y,'#f97316');
-      previous={s,x,y}
-    }
-  }else for(const b of bins){
-    if(b.start+motionOffset+b.length<start)continue;if(b.start+motionOffset>end)break;
-    const s=b.start+motionOffset+b.length/2,y=secToY(s),x=motionX(b.avg,max,c);
-    if(motionMode!=='bar'&&previous&&s-previous.s<=Math.max(b.length,previous.length)*1.6)line(previous.x,previous.y,x,y,'#2563eb',1.4);
-    previous={s,x,y,length:b.length};
-    if(motionMode!=='line'&&y>=0&&y<=canvas.height)line(c.ml,y,motionX(b.max,max,c),y,'#f97316',1.2)
-  }
-}
-function soundGraph(start,end,c){
-  ctx.save();ctx.beginPath();ctx.rect(c.sl,0,c.sw,canvas.height);ctx.clip();
-  const mid=c.sl+c.sw/2,amp=c.sw/2*waveGain;
-  for(const clip of clips){
-    if(clip.start>end)break;if(clip.start+clip.length<start)continue;
-    const first=Math.max(0,Math.floor((start-clip.start)*PEAK_RATE)),last=Math.min(clip.minimum.length-1,Math.ceil((end-clip.start)*PEAK_RATE)),floor=clip.noiseFloor||0;
-    let row=-1,low=0,high=0;
-    const flush=()=>{if(row>=0&&(low!==0||high!==0))line(mid+clamp(low*amp,-c.sw/2,c.sw/2),row+.5,mid+clamp(high*amp,-c.sw/2,c.sw/2),row+.5,'#2563eb',1)};
-    for(let i=first;i<=last;i++){
-      const y=Math.floor(secToY(clip.start+i/PEAK_RATE));if(y<0||y>=canvas.height)continue;
-      const lo=clip.minimum[i],hi=clip.maximum[i],l=Math.sign(lo)*Math.max(0,Math.abs(lo)-floor),h=Math.sign(hi)*Math.max(0,Math.abs(hi)-floor);
-      if(y!==row){flush();row=y;low=l;high=h}else{low=Math.min(low,l);high=Math.max(high,h)}
-    }
-    flush()
-  }
-  ctx.restore()
-}
-function fitbitGraph(start,end,c){
-  for(const x of[c.spo,c.bpm,c.stage])line(x,0,x,canvas.height);
-  function graph(points,left,right,scale,color){
-    let previous=null;
-    for(const item of points){
-      const s=(item.at-startMs)/1000;if(s<start)continue;if(s>end)break;
-      const p={x:left+clamp(scale(item.value),0,1)*(right-left),y:secToY(s),s};
-      if(previous&&p.s-previous.s<=600)line(previous.x,previous.y,p.x,p.y,color,1.5);
-      ctx.fillStyle=color;ctx.fillRect(p.x-1,p.y-1,2,2);previous=p
-    }
-  }
-  graph(fitbit.spo2,c.spo+3,c.bpm-4,v=>(v-90)/10,'#0f766e');
-  graph(fitbit.bpm,c.bpm+3,c.stage-4,v=>(v-40)/80,'#dc2626');
-  for(const item of fitbit.stages){
-    const a=(item.start-startMs)/1000,b=(item.end-startMs)/1000;if(b<start)continue;if(a>end)break;
-    const top=clamp(secToY(a),0,canvas.height),bottom=clamp(secToY(b),0,canvas.height);
-    ctx.fillStyle=COLORS[item.level];ctx.fillRect(c.stage+3,top,Math.max(1,canvas.width-c.stage-6),Math.max(1,bottom-top))
-  }
-}
-function requestDraw(){if(drawFrame||disposed)return;drawFrame=requestAnimationFrame(()=>{drawFrame=0;draw()})}
-function draw(){
-  if(disposed||$('scopePage').hidden||!canvas.width||!canvas.height)return;
-  ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);
-  const start=windowStart(),end=start+span,c=columns(),max=motionMax();
-  $('motionMidLabel').textContent=motionLabel(max/2);$('motionMaxLabel').textContent=motionLabel(max);
-  if(motionSetting==='auto'){$('motionScaleValue').textContent='自動 '+motionLabel(max);$('motionScaleSlider').value=clamp(max,.01,.30)}
-  for(const v of[max/2,max])line(motionX(v,max,c),0,motionX(v,max,c),canvas.height,'#e2e8f0');
-  for(let i=-5;i<=5;i++){const x=c.sl+c.sw/2+i/5*c.sw/2;line(x,0,x,canvas.height,i===0?'#64748b':'#eef2f7')}
-  ticks(start,end,c);motionGraph(start,end,c,max);soundGraph(start,end,c);fitbitGraph(start,end,c);
-  $('currentCenterTime').textContent=clock(center)
-}
-function resize(){
-  if(disposed||$('scopePage').hidden)return;
-  const rect=viewport.getBoundingClientRect(),w=Math.max(1,Math.round(rect.width)),h=Math.max(1,Math.round(rect.height));
-  if(initialized&&w===canvas.width&&h===canvas.height)return;
-  const old=canvas.height||1;canvas.width=w;canvas.height=h;
-  if(!initialized){ya=h*.32;yb=h*.68;initialized=true;cursor=yToSec((ya+yb)/2)}else{ya=ya/old*h;yb=yb/old*h}
-  requestDraw();updateLines()
-}
-
-/* ----- 計測（dB・Hz） ----- */
-function nearest(s){
-  if(!logs.length)return null;
-  let lo=0,hi=logs.length-1;
-  while(lo<hi){const m=(lo+hi)>>1;if(logs[m].sec<s)lo=m+1;else hi=m}
-  const r=logs[lo],l=lo?logs[lo-1]:null;
-  return l&&Math.abs(l.sec-s)<=Math.abs(r.sec-s)?l:r
-}
-function measure(s){
-  const near=nearest(s),close=near&&Math.abs(near.sec-s)<=1.5;
-  let db=close?near.db:null,hz=close&&near.hz>0?near.hz:null;
-  if(db===null||hz===null){
-    const clip=clips.find(c=>s>=c.start&&s<c.start+c.length);
-    if(clip&&clip.envelope.length){
-      const i=clamp(Math.round((s-clip.start)*RATE),0,clip.envelope.length-1);
-      if(db===null)db=clip.envelope[i];
-      if(hz===null&&clip.frequency[i]>0)hz=clip.frequency[i]
-    }
-  }
-  return{db,hz}
-}
-function metrics(s,t,d,h){
-  const m=measure(s);
-  $(t).textContent=clock(s);
-  $(d).textContent=Number.isFinite(m.db)?m.db.toFixed(1)+' dB':'-- dB';
-  $(h).textContent=Number.isFinite(m.hz)&&m.hz>0?Math.round(m.hz)+' Hz':'-- Hz'
-}
-function showHead(){
-  const head=$('playheadLine');
-  head.style.top=secToY(cursor)+'px';
-  head.setAttribute('aria-valuemin',intervalStart);head.setAttribute('aria-valuemax',intervalEnd);
-  head.setAttribute('aria-valuenow',cursor);head.setAttribute('aria-valuetext',clock(cursor));
-  metrics(cursor,'replayTime','replayDb','replayHz')
-}
-function updateLines(){
-  const top=Math.min(ya,yb),bottom=Math.max(ya,yb);
-  intervalStart=yToSec(top);intervalEnd=yToSec(bottom);
-  cursor=clamp(cursor,intervalStart,intervalEnd);
-  $('lineA').style.top=ya+'px';$('lineB').style.top=yb+'px';
-  $('intervalBracket').style.top=top+'px';$('intervalBracket').style.height=bottom-top+'px';
-  metrics(yToSec(ya),'labelATime','labelADb','labelAHz');
-  metrics(yToSec(yb),'labelBTime','labelBDb','labelBHz');
-  $('intervalSec').textContent=formatInterval(intervalEnd-intervalStart);
-  for(const id of['lineA','lineB'])$(id).querySelector('.labelWrap').style.visibility=playing?'hidden':'visible';
-  const hud=$('intervalHud'),height=hud.offsetHeight||150;
-  hud.style.top=clamp(top+(bottom-top-height)/2,0,Math.max(0,canvas.height-height))+'px';
-  const active=playing||preparing;
-  $('playIcon').textContent=active?'■':'▶';
-  $('playText').textContent=preparing?'準備を中止':playing?'停止':'区間再生';
-  $('playIntervalBtn').classList.toggle('stopping',active);
-  $('playIntervalBtn').classList.toggle('primary',!active);
-  const fullView=$('windowScaleSelect').value==='all';
-  for(const id of['timeSlider','timePrevBtn','timeNextBtn'])$(id).disabled=active||fullView;
-  $('windowScaleSelect').disabled=active;
-  showHead()
-}
-function currentCursor(){if(playing&&ac)cursor=clamp(anchorSec+Math.max(0,ac.currentTime-anchorTime),intervalStart,intervalEnd);return cursor}
-
-/* ----- 候補・レポート ----- */
-function candidates(){
-  if(!hasTracker)return{movement:0,low:0};
-  const points=bins.length?bins.map(b=>({sec:b.start+b.length/2,value:b.max})):motionPoints.map(x=>({sec:x.sec,value:x.motion}));
-  let movement=0,last=-Infinity;
-  for(const p of points)if(p.value!==null&&p.value>=.025&&p.sec-last>=60){movement++;last=p.sec}
-  let low=0,begin=null,previous=null;
-  function finishLow(){if(begin!==null&&previous!==null&&previous-begin>=9)low++;begin=null}
-  for(const x of logs){
-    if(previous!==null&&x.sec-previous>2)finishLow();
-    if(x.db!==null&&x.db<22){if(begin===null)begin=x.sec}else finishLow();
-    previous=x.sec
-  }
-  finishLow();
-  return{movement,low}
-}
-function stageChart(){
-  const chart=$('stageChart');chart.width=Math.max(1,Math.round(chart.getBoundingClientRect().width));chart.height=110;
-  const c=chart.getContext('2d');c.fillStyle='#fff';c.fillRect(0,0,chart.width,chart.height);c.font='11px monospace';
-  if(!fitbit.stages.length){c.fillStyle='#64748b';c.fillText('睡眠ステージなし',10,25);return}
-  let first=Infinity,last=-Infinity;
-  for(const s of fitbit.stages){first=Math.min(first,s.start);last=Math.max(last,s.end)}
-  const total=Math.max(1,last-first),width=Math.max(1,chart.width-68),rows={wake:0,rem:1,light:2,deep:3};
-  for(const s of fitbit.stages){const x=60+(s.start-first)/total*width,right=60+(s.end-first)/total*width;c.fillStyle=COLORS[s.level];c.fillRect(x,rows[s.level]*25+5,Math.max(1,right-x),18)}
-  c.fillStyle='#334155';
-  for(const[label,row]of[['覚醒',0],['REM',1],['浅い',2],['深い',3]])c.fillText(label,7,row*25+19)
-}
-function report(){
-  if(disposed)return;
-  $('reportPeriod').textContent=hasTracker?`${datetime(0)} ～ ${datetime(duration)}`:'セッション未読込';
-  $('reportMode').textContent=!hasTracker?'SleepTrackerセッション未読込':!fitbit.sourceCount?'SleepTracker単独モード。Fitbit未読込。':'実データ表示。ただしイベント候補の抽出は臨床的に未検証。';
-  $('fitbitScoreText').textContent=fitbit.score===null?'未取得':`${fitbit.score} / 100`;
-  const event=candidates();
-  $('eventCountText').textContent=hasTracker?`体動 ${event.movement} / 音量低下 ${event.low}`:'未解析';
-  $('eventSummary').textContent=hasTracker?`体動候補 ${event.movement}件、連続音量低下候補 ${event.low}件。いずれも診断イベントではありません。`:'SleepTrackerログ未読込';
-  const totals={deep:0,light:0,rem:0,wake:0};
-  for(const s of fitbit.stages)totals[s.level]+=Math.max(0,(s.end-s.start)/60000);
-  $('stageSummary').textContent=fitbit.stages.length?`深い ${Math.round(totals.deep)}分 / 浅い ${Math.round(totals.light)}分 / REM ${Math.round(totals.rem)}分 / 覚醒 ${Math.round(totals.wake)}分`:'ステージデータなし';
-  $('fitbitSummary').textContent=fitbit.sourceCount?`心拍 ${fitbit.bpm.length}点 / 時系列SpO₂ ${fitbit.spo2.length}点${fitbit.spo2Range?` / SpO₂範囲 ${fitbit.spo2Range.min}–${fitbit.spo2Range.max}%`:''}。範囲値だけでは時系列波形は描きません。`:'Fitbitデータ未読込';
-  if(!$('reportPage').hidden)stageChart()
-}
-function refresh(){
-  const markA=yToSec(ya),markB=yToSec(yb);
-  for(const c of clips)duration=Math.max(duration,c.start+c.length);
-  if($('windowScaleSelect').value==='all'){
-    span=Math.max(1,duration);center=duration/2;
-    if(canvas.height){ya=secToY(clamp(markA,0,duration));yb=secToY(clamp(markB,0,duration))}
-  }else center=clamp(center,0,duration);
-  $('timeSlider').max=duration;$('timeSlider').value=center;
-  requestDraw();updateLines();report()
-}
-function offset(v){
-  motionOffset=clamp(num(v,0),-3600,3600);
-  $('motionOffsetSlider').value=clamp(motionOffset,-300,300);
-  $('motionOffsetInput').value=motionOffset.toFixed(1);
-  $('motionOffsetDirection').textContent=Math.abs(motionOffset)<.001?'補正なし':`体動を${Math.abs(motionOffset).toFixed(1)}秒${motionOffset>0?'後':'前'}へ`;
-  save('sleepScopeMotionOffsetSec',motionOffset);requestDraw()
-}
-function scale(v){
-  if(v==='auto'||v===null||v===undefined)motionSetting='auto';
-  else{const n=num(v,null);motionSetting=n===null?'auto':String(clamp(n,.01,.30))}
-  const eff=motionMax();
-  $('motionScaleSlider').value=clamp(eff,.01,.30);
-  $('motionScaleValue').textContent=motionSetting==='auto'?'自動 '+motionLabel(eff):motionLabel(Number(motionSetting));
-  save('sleepScopeMotionScale',motionSetting);requestDraw()
-}
-function updateGain(){$('waveformGainValue').textContent=waveGain.toFixed(2)+'倍';$('pcmScaleText').textContent=waveGain.toFixed(2);requestDraw()}
-function page(showReport){
-  $('scopePage').hidden=showReport;$('reportPage').hidden=!showReport;
-  $('scopeTab').setAttribute('aria-selected',String(!showReport));$('reportTab').setAttribute('aria-selected',String(showReport));
-  if(showReport)report();else requestAnimationFrame(()=>{resize();requestDraw();updateLines()})
-}
-function moveCenter(v){
-  if(playing||preparing||gesture||trackerLoading||$('windowScaleSelect').value==='all')return;
-  const next=clamp(v,0,duration),delta=next-center;
-  center=next;cursor+=delta;$('timeSlider').value=center;requestDraw();updateLines()
-}
-
-/* ----- イベント登録 ----- */
-on($('logSelectBtn'),'click',()=>{if($('logTypeSelect').value==='fitbit')$('fitbitInput').click();else $('masterInput').click()});
-on($('masterInput'),'change',e=>{pendingTrackerFile=e.target.files?.[0]||null;if(pendingTrackerFile)$('loadStatusBadge').textContent='選択済み: '+pendingTrackerFile.name});
-on($('fitbitInput'),'change',e=>{pendingFitbitFiles=Array.from(e.target.files||[]);if(pendingFitbitFiles.length)$('loadStatusBadge').textContent=`選択済み: ${pendingFitbitFiles.length}ファイル`});
-on($('logReadBtn'),'click',async()=>{
-  if($('logTypeSelect').value==='fitbit'){
-    if(!pendingFitbitFiles.length){$('loadStatusBadge').textContent='先にログを選択してください';return}
-    const generation=++fitbitGeneration;fitbitLoading=true;
-    try{await loadFitbit(pendingFitbitFiles,generation);$('loadStatusBadge').textContent='Fitbitログ読込み完了'}
-    catch(error){$('loadStatusBadge').textContent='読込失敗: '+error.message;console.error(error)}
-    finally{if(generation===fitbitGeneration)fitbitLoading=false}
-    return
-  }
-  if(!pendingTrackerFile){$('loadStatusBadge').textContent='先にログを選択してください';return}
-  const generation=++trackerGeneration;trackerLoading=true;gesture=null;
-  try{await loadTracker(pendingTrackerFile,generation)}
-  catch(error){if(generation===trackerGeneration&&!disposed){$('loadStatusBadge').textContent='読込失敗: '+error.message;console.error(error)}}
-  finally{if(generation===trackerGeneration)trackerLoading=false}
-});
-on($('scopeTab'),'click',()=>page(false));on($('reportTab'),'click',()=>page(true));
-on($('printBtn'),'click',()=>window.print());on(window,'beforeprint',stageChart);
-on($('waveformGainSlider'),'input',e=>{waveGain=clamp(num(e.target.value,1),.25,100);updateGain()});
-on($('motionOffsetSlider'),'input',e=>offset(e.target.value));
-on($('motionOffsetInput'),'change',e=>offset(e.target.value));
-on($('motionOffsetMinusBtn'),'click',()=>offset(motionOffset-1));
-on($('motionOffsetPlusBtn'),'click',()=>offset(motionOffset+1));
-on($('motionOffsetResetBtn'),'click',()=>offset(0));
-on($('motionScaleSlider'),'input',e=>scale(e.target.value));
-on($('motionScaleAutoBtn'),'click',()=>scale('auto'));
-on($('motionModeSelect'),'change',e=>{motionMode=['both','bar','line'].includes(e.target.value)?e.target.value:'both';save('sleepScopeMotionMode',motionMode);requestDraw()});
-on($('timeSlider'),'input',e=>moveCenter(Number(e.target.value)));
-on($('timePrevBtn'),'click',()=>moveCenter(center-Math.max(1,span*.2)));
-on($('timeNextBtn'),'click',()=>moveCenter(center+Math.max(1,span*.2)));
-on(viewport,'wheel',e=>{e.preventDefault();moveCenter(center+Math.sign(e.deltaY)*Math.max(1,span/30))},{passive:false});
-on($('windowScaleSelect'),'change',e=>{
-  if(trackerLoading){e.target.value=span;return}
-  if(playing||preparing)stopPlayback();
-  gesture=null;
-  const C=currentCursor(),a=yToSec(ya),b=yToSec(yb),aAbove=ya<=yb;
-  if(e.target.value==='all'){span=Math.max(1,duration);center=duration/2;ya=secToY(clamp(a,0,duration));yb=secToY(clamp(b,0,duration))}
-  else{
-    span=Number(e.target.value);center=clamp(C,0,duration);
-    const h=canvas.height,margin=Math.min(10,h/4),visible=span*(h-2*margin)/Math.max(1,h);
-    if(Math.abs(b-a)<=visible){ya=clamp(secToY(a),margin,h-margin);yb=clamp(secToY(b),margin,h-margin)}
-    else{ya=h*(aAbove?.32:.68);yb=h*(aAbove?.68:.32)}
-    const na=yToSec(ya),nb=yToSec(yb),lo=Math.min(na,nb),hi=Math.max(na,nb);
-    if(C<lo){if(na<=nb)ya=secToY(C);else yb=secToY(C)}
-    else if(C>hi){if(na>=nb)ya=secToY(C);else yb=secToY(C)}
-  }
-  cursor=C;$('timeSlider').max=duration;$('timeSlider').value=center;requestDraw();updateLines()
-});
-
-/* ----- 画面のドラッグ操作 ----- */
-on(viewport,'pointerdown',e=>{
-  if(gesture||trackerLoading||e.button!==0||e.target.closest('#intervalHud'))return;
-  const head=e.target.closest('#playheadLine'),measurement=e.target.closest('.measureLine');
-  let kind='pan',resume=false;
-  if(head){kind='head';resume=playing;currentCursor();if(playing||preparing)stopPlayback('位置を選択中')}
-  else{if(playing||preparing)return;if(measurement)kind=measurement.id==='lineA'?'A':'B'}
+/* ===== 配線 ===== */
+$("btn-perms").onclick = takePerms;
+$("reg-name").addEventListener("input", syncOcrBtn);
+$("reg-chart").addEventListener("input", syncOcrBtn);
+// キーボードの確定（Enter）で入力を完了する：両方入っていれば登録、名前だけなら番号の欄へ進む（V13）。
+$("reg-form").addEventListener("submit", async (e) => {
   e.preventDefault();
-  gesture={id:e.pointerId,kind,resume,y:e.clientY,center,cursor,a0:yToSec(ya),b0:yToSec(yb),c0:cursor};
-  try{viewport.setPointerCapture(e.pointerId)}catch(_){gesture=null;return}
-  if(kind==='head')$('audioStatusText').textContent='位置を選択中'
+  const nm = $("reg-name").value.trim(), cn = $("reg-chart").value.trim();
+  if (nm && cn) await registerPatient();
+  else if (nm) $("reg-chart").focus();
+  else $("reg-name").focus();
 });
-on(viewport,'pointermove',e=>{
-  if(!gesture||e.pointerId!==gesture.id)return;
-  e.preventDefault();
-  const rect=canvas.getBoundingClientRect(),h=canvas.height,margin=Math.min(10,h/4);
-  if(gesture.kind==='pan'){
-    const next=clamp(gesture.center-(e.clientY-gesture.y)/Math.max(1,h)*span,0,duration);
-    center=next;cursor=gesture.cursor+next-gesture.center;
-    $('timeSlider').value=center;requestDraw();updateLines();return
+$("btn-ocr").onclick = async () => {
+  if (!PERMS.cam) { toast("先に権限を取ってください"); return; }
+  S.mode = "ocr"; S.step = 0; S.shots = [];
+  $("page-top").hidden = true; $("page-detail").hidden = true;
+  $("cam-wrap").hidden = false;
+  updateCamDir();
+  try { await startCamera(); } catch (e) {
+    cancelShoot();
+    const el = $("cam-err");
+    if (el) el.textContent = "カメラを開けませんでした（" + (e && (e.name || e.message) || e) + "）";
   }
-  const y=clamp(e.clientY-rect.top,margin,h-margin);
-  if(gesture.kind==='A')ya=y;
-  else if(gesture.kind==='B')yb=y;
-  else{
-    const lo=Math.min(gesture.a0,gesture.b0),hi=Math.max(gesture.a0,gesture.b0),delta=clamp(yToSec(y)-gesture.c0,-lo,duration-hi);
-    ya=secToY(gesture.a0+delta);yb=secToY(gesture.b0+delta);cursor=gesture.c0+delta;updateLines();return
+};
+$("btn-start-before").onclick = async () => {
+  const ce = $("cam-err"); if (ce) ce.textContent = "";
+  const nm = $("reg-name").value.trim(), cn = $("reg-chart").value.trim();
+  if (nm && cn) await registerPatient();
+  if (!currentPatient) { toast("患者が決まっていません"); return; }
+  beginShoot("before", null, currentPatient);
+};
+$("shutter").onclick = takePhoto;
+$("btn-cam-cancel").onclick = cancelShoot;
+$("btn-cam-skip").onclick = () => { if (!S.busy) nextStep(); };
+$("btn-cam-finish").onclick = () => { if (!S.busy) finishShoot(); };
+$("btn-cam-grid").onclick = () => {
+  S.gridMode = (S.gridMode + 1) % 3;
+  $("btn-cam-grid").textContent = S.gridMode === 1 ? "格子（細）" : S.gridMode === 2 ? "格子（粗）" : "格子";
+};
+$("btn-cam-flip").onclick = async () => {
+  S.facing = S.facing === "environment" ? "user" : "environment";
+  stopCamera();
+  try { await startCamera(); } catch (e) { toast("切り替えられませんでした"); }
+};
+$("btn-back-top").onclick = () => { $("page-detail").hidden = true; $("page-top").hidden = false; };
+$("btn-export-json").onclick = () => {
+  if (!currentSet) return;
+  const data = {
+    patient: currentSet.patient, kind: currentSet.kind,
+    createdAt: new Date(currentSet.createdAt).toISOString(),
+    photos: currentPhotos.map((p) => ({ dir: p.dir, w: p.w, h: p.h, tilt: p.tilt, pitch: p.pitch, alpha: p.alpha, beta: p.beta, gamma: p.gamma, contour: p.contour }))
+  };
+  downloadBlob(new Blob([JSON.stringify(data, null, 1)], { type: "application/json" }), fileBase() + "_data.json");
+};
+$("btn-delete-set").onclick = async () => {
+  if (!currentSet || !confirm("削除しますか？")) return;
+  for (const p of currentPhotos) await DB.del("photos", p.id);
+  await DB.del("sets", currentSet.id);
+  $("page-detail").hidden = true; $("page-top").hidden = false;
+  await renderList();
+};
+
+/* ===== 更新確認（キャッシュを避けて最新版を開く。睡眠アプリと同じ仕組み） ===== */
+const UPD_REPO = "matsuodentalassociation/camera";
+const UPD_BRANCH = "main";
+const UPD_FILE = "index.html";
+const UPD_PAGES = "https://matsuodentalassociation.github.io/camera/";
+const UPD_TARGET_KEY = "posturecam-update-target";
+const UPDATE_EVERY_MS = 10 * 60 * 1000;
+const UPD_TIMEOUT_MS = 10000;
+const updState = { checking: false, applying: false, latest: null, sha: "", error: "", checkedAt: 0, userInitiated: false };
+function updMsg(text) { const el = $("upd-msg"); if (el) el.textContent = text; }
+function parseVersion(text) {
+  const m = String(text || "").match(/const\s+APP_VERSION\s*=\s*(\d+)/);
+  return m ? Number(m[1]) : null;
+}
+async function updFetch(url, timeoutMs) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), timeoutMs || UPD_TIMEOUT_MS);
+  try { return await fetch(url, { cache: "no-store", signal: ctl.signal }); }
+  finally { clearTimeout(timer); }
+}
+async function fetchLatestCommit() {
+  const api = "https://api.github.com/repos/" + UPD_REPO + "/commits/" + UPD_BRANCH + "?_=" + Date.now();
+  const res = await updFetch(api);
+  if (!res.ok) throw new Error("GitHub API " + res.status);
+  const data = await res.json();
+  if (!data || !data.sha) throw new Error("最新コミットを取得できませんでした");
+  return data;
+}
+async function fetchCommittedFile(sha) {
+  const url = "https://raw.githubusercontent.com/" + UPD_REPO + "/" + sha + "/" + UPD_FILE;
+  const res = await updFetch(url);
+  if (!res.ok) throw new Error("最新版ファイルを取得できませんでした");
+  return res.text();
+}
+async function fetchServedVersion() {
+  const url = UPD_PAGES + "?updcheck=" + Date.now();
+  const res = await updFetch(url, 15000);
+  if (!res.ok) throw new Error("公開ページを確認できませんでした");
+  return parseVersion(await res.text());
+}
+function renderUpdate() {
+  const btn = $("btn-update");
+  if (!btn) return;
+  if (updState.applying) {
+    btn.disabled = true;
+    btn.textContent = "最新版へ切り替え中…";
+    updMsg("キャッシュを消して、最新版を開き直しています。");
+    return;
   }
-  updateLines()
-});
-function endGesture(e,cancelled=false){
-  if(!gesture||e.pointerId!==gesture.id)return;
-  const ended=gesture;gesture=null;
-  try{viewport.releasePointerCapture(e.pointerId)}catch(_){}
-  if(ended.kind==='head'){
-    if(!cancelled&&ended.resume&&cursor<intervalEnd-.01)schedule(cursor);
-    else{$('audioStatusText').textContent=cancelled?'位置選択を終了':'再生位置を設定';updateLines()}
+  btn.disabled = false;
+  if (updState.latest && updState.latest > APP_VERSION) {
+    btn.textContent = "最新版 V" + updState.latest + " に変更（キャッシュを避けて再読み込み）";
+    updMsg("新しい版 V" + updState.latest + " があります。今は V" + APP_VERSION + " です。");
+  } else {
+    btn.textContent = "最新版に変更（キャッシュを避けて再読み込み）";
+    if (updState.error) updMsg(updState.error);
+    else if (updState.checkedAt) updMsg("最新版を確認済みです（現在 V" + APP_VERSION + "）。");
+    else updMsg("公開ページの最新版を確認します。");
   }
 }
-on(viewport,'pointerup',e=>endGesture(e));
-on(viewport,'pointercancel',e=>endGesture(e,true));
-on(viewport,'lostpointercapture',e=>endGesture(e,true));
-on($('playheadLine'),'keydown',e=>{
-  if(!['ArrowUp','ArrowDown','Home','End'].includes(e.key))return;
-  e.preventDefault();
-  if(e.key==='ArrowUp')seekBy(e.shiftKey?-5:-1);
-  else if(e.key==='ArrowDown')seekBy(e.shiftKey?5:1);
-  else seekBy((e.key==='Home'?intervalStart:intervalEnd)-currentCursor())
-});
+async function checkUpdate(userInitiated) {
+  if (updState.checking || updState.applying) return;
+  updState.checking = true;
+  updState.userInitiated = !!userInitiated;
+  updState.error = "";
+  if (userInitiated) updMsg("最新版を確認しています…");
+  try {
+    const commit = await fetchLatestCommit();
+    const latest = parseVersion(await fetchCommittedFile(commit.sha));
+    if (!latest) throw new Error("最新版の番号を確認できませんでした");
+    updState.latest = latest;
+    updState.sha = commit.sha;
+    const firstCheck = !updState.checkedAt;
+    updState.checkedAt = Date.now();
+    if (latest > APP_VERSION) {
+      // 更新の表示は出さない（秀司の指示）。開いた直後の確認で新しい版があれば、黙って切り替える。
+      if (userInitiated || firstCheck) await applyLatest();
+    } else if (userInitiated) {
+      updMsg("いま開いているのが最新版です（V" + APP_VERSION + "）。");
+    }
+  } catch (e) {
+    console.error(e);
+    updState.error = userInitiated ? "最新版を確認できませんでした。通信状態を確認して、もう一度押してください。" : "";
+  } finally {
+    updState.checking = false;
+    if (!updState.applying) renderUpdate();
+  }
+}
+async function applyLatest() {
+  if (updState.applying) return;
+  if (S.stream || S.busy) { updMsg("撮影中は切り替えられません。撮影を終えてから押してください。"); return; }
+  updState.applying = true;
+  renderUpdate();
+  try {
+    const latest = updState.latest;
+    const sha = updState.sha || (await fetchLatestCommit()).sha;
+    let served = null;
+    for (let i = 0; i < 6; i++) {
+      served = await fetchServedVersion().catch(() => null);
+      if (served && served >= latest) break;
+      if (i < 5) await new Promise((r) => setTimeout(r, 5000));
+    }
+    if (!served || served < latest) {
+      updState.applying = false;
+      updMsg("新しい版はまだ公開ページへ反映されていません。少し待ってから、もう一度押してください。");
+      renderUpdate();
+      return;
+    }
+    try { sessionStorage.setItem(UPD_TARGET_KEY, JSON.stringify({ version: latest, sha, at: Date.now() })); } catch (e) {}
+    if ("caches" in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((k) => caches.delete(k)));
+    }
+    if ("serviceWorker" in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map((r) => r.unregister()));
+    }
+    const url = new URL(location.href);
+    url.searchParams.set("v", String(latest));
+    url.searchParams.set("c", String(sha).slice(0, 12));
+    url.searchParams.set("t", String(Date.now()));
+    location.replace(url.toString());
+  } catch (e) {
+    console.error(e);
+    updState.applying = false;
+    updMsg("切り替えに失敗しました。もう一度押してください。");
+    renderUpdate();
+  }
+}
+const updBtn = $("btn-update");
+if (updBtn) updBtn.onclick = () => { checkUpdate(true); };
 
-/* ----- 再生ボタン（クリックの最初の同期部分で再生を開始する） ----- */
-on($('playIntervalBtn'),'click',()=>{
-  if(playing||preparing){stopPlayback('停止');return}
-  if(gesture||trackerLoading)return;
-  updateLines();
-  schedule(cursor>=intervalEnd-.01?intervalStart:cursor)
-});
-on($('refPlayBtn'),'click',()=>playRef());
-on($('rewindBtn'),'click',()=>seekBy(-5));
-on($('forwardBtn'),'click',()=>seekBy(5));
-
-on(window,'resize',()=>{resize();if(!$('reportPage').hidden)stageChart()});
-if(typeof ResizeObserver==='function'){observer=new ResizeObserver(resize);observer.observe(viewport)}
-
-/* ----- 初期化 ----- */
-motionMode=['both','bar','line'].includes(stored('sleepScopeMotionMode','both'))?stored('sleepScopeMotionMode','both'):'both';
-$('motionModeSelect').value=motionMode;
-scale(stored('sleepScopeMotionScale','auto'));
-offset(num(stored('sleepScopeMotionOffsetSec','0'),0));
-updateGain();resize();refresh();
-requestAnimationFrame(()=>{resize();requestDraw()});
+(async () => {
+  await DB.open();
+  const savedId = localStorage.getItem("pc-patient");
+  if (savedId) currentPatient = await DB.get("patients", savedId);
+  await renderPatients();
+  updatePermUI();
+  await renderList();
+  renderUpdate();
+  checkUpdate(false);
+  setInterval(() => { checkUpdate(false); }, UPDATE_EVERY_MS);
 })();
-
+</script>
+</body>
+</html>
