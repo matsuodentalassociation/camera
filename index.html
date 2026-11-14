@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>姿勢カメラ V18</title>
+<title>姿勢カメラ V19</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -42,7 +42,7 @@
 <body>
 
 <main id="page-top">
-  <h1>姿勢カメラ V18</h1>
+  <h1>姿勢カメラ V19</h1>
   <button id="btn-perms" class="primary">カメラとセンサーの権限を取る</button>
   <p class="muted">カメラ：<span id="perm-cam">未取得</span>　センサー：<span id="perm-sensor">未取得</span></p>
   <p id="cam-err" class="err"></p>
@@ -94,7 +94,7 @@
 
 <script>
 "use strict";
-const APP_VERSION = 18;
+const APP_VERSION = 19;
 const DIRS = ["front", "right", "left", "back"];
 const DIR_JA = { front: "正面", right: "右側面", left: "左側面", back: "背面" };
 const $ = (id) => document.getElementById(id);
@@ -735,6 +735,74 @@ function correctedCanvas(img, tilt) {
   out.getContext("2d").drawImage(rot, (rot.width - cw) / 2, (rot.height - ch) / 2, cw, ch, 0, 0, cw, ch);
   return out;
 }
+// 輪郭（元の写真に対する 0〜1 の点列）を、傾き補正後のキャンバス座標での人の範囲に変換する（V19）。
+function personBox(img, tilt, contour) {
+  if (!contour || contour.length < 3) return null;
+  const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+  const ang = -(tilt || 0) * Math.PI / 180;
+  const t = Math.abs(ang), cos = Math.cos(t), sin = Math.sin(t);
+  const rotW = Math.round(w * cos + h * sin), rotH = Math.round(w * sin + h * cos);
+  let cw = w, ch = h;
+  const det = cos * cos - sin * sin;
+  if (sin > 0.0001 && det > 0.2) {
+    const x = ((w / 2) * cos - (h / 2) * sin) / det;
+    const y = ((h / 2) * cos - (w / 2) * sin) / det;
+    if (x > 10 && y > 10) { cw = Math.floor(2 * x); ch = Math.floor(2 * y); }
+  }
+  const offX = (rotW - cw) / 2, offY = (rotH - ch) / 2;
+  const ca = Math.cos(ang), sa = Math.sin(ang);
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const p of contour) {
+    const cx = p[0] * w - w / 2, cy = p[1] * h - h / 2;
+    const rx = cx * ca - cy * sa, ry = cx * sa + cy * ca;
+    const X = rx + rotW / 2 - offX, Y = ry + rotH / 2 - offY;
+    if (X < x0) x0 = X; if (X > x1) x1 = X; if (Y < y0) y0 = Y; if (Y > y1) y1 = Y;
+  }
+  if (!(x1 > x0 && y1 > y0)) return null;
+  return { x0, y0, x1, y1 };
+}
+// 人の高さと頭の位置を左右で揃えた表示用キャンバスを返す（V19）。
+function alignedPair(cvB, boxB, cvA, boxA) {
+  const phB = boxB.y1 - boxB.y0, phA = boxA.y1 - boxA.y0;
+  const PH = Math.max(phB, phA);
+  const sB = PH / phB, sA = PH / phA;
+  const head = Math.round(PH * 0.05);
+  const OW = Math.round(Math.max(cvB.width * sB, cvA.width * sA));
+  const oyB = head - boxB.y0 * sB, oyA = head - boxA.y0 * sA;
+  const OH = Math.round(Math.max(cvB.height * sB + oyB, cvA.height * sA + oyA));
+  const mk = (cv, s, box, oy) => {
+    const out = document.createElement("canvas"); out.width = OW; out.height = OH;
+    const ctx = out.getContext("2d");
+    ctx.fillStyle = "#000"; ctx.fillRect(0, 0, OW, OH);
+    const ox = OW / 2 - ((box.x0 + box.x1) / 2) * s;
+    ctx.drawImage(cv, ox, oy, cv.width * s, cv.height * s);
+    return out;
+  };
+  return [mk(cvB, sB, boxB, oyB), mk(cvA, sA, boxA, oyA)];
+}
+// 輪郭が無い時は、写真の高さだけを揃える（V19）。
+function equalHeightPair(cvB, cvA) {
+  const OH = Math.max(cvB.height, cvA.height);
+  const sB = OH / cvB.height, sA = OH / cvA.height;
+  const OW = Math.round(Math.max(cvB.width * sB, cvA.width * sA));
+  const mk = (cv, s) => {
+    const out = document.createElement("canvas"); out.width = OW; out.height = OH;
+    const ctx = out.getContext("2d");
+    ctx.fillStyle = "#000"; ctx.fillRect(0, 0, OW, OH);
+    ctx.drawImage(cv, (OW - cv.width * s) / 2, 0, cv.width * s, cv.height * s);
+    return out;
+  };
+  return [mk(cvB, sB), mk(cvA, sA)];
+}
+function loadImg(blob) {
+  return new Promise((res, rej) => {
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => { URL.revokeObjectURL(url); res(img); };
+    img.onerror = (e) => { URL.revokeObjectURL(url); rej(e); };
+    img.src = url;
+  });
+}
 function downloadBlob(blob, name) {
   const a = document.createElement("a");
   const url = URL.createObjectURL(blob);
@@ -769,6 +837,7 @@ async function openDetail(setId) {
   }
 
   // 対のセット（ビフォー⇔アフター）があれば、方向ごとに左右に並べて見せる（V18）。
+  // V19: 並べる時は、輪郭から人の高さと頭の位置を左右で揃える。
   let pairSet = null, pairPhotos = [];
   if (currentSet.kind === "after" && currentSet.baseSetId) {
     pairSet = await DB.get("sets", currentSet.baseSetId);
@@ -784,33 +853,16 @@ async function openDetail(setId) {
   const afterPhotos = currentSet.kind === "after" ? currentPhotos : pairPhotos;
   const beforeSet = currentSet.kind === "before" ? currentSet : pairSet;
   const afterSet = currentSet.kind === "after" ? currentSet : pairSet;
-  const entries = [];
-  if (pairSet) {
-    for (const dir of DIRS) {
-      const b = beforePhotos.find((x) => x.dir === dir) || null;
-      const a = afterPhotos.find((x) => x.dir === dir) || null;
-      if (!b && !a) continue;
-      entries.push(b ? { p: b, kind: "before", set: beforeSet } : null);
-      entries.push(a ? { p: a, kind: "after", set: afterSet } : null);
-    }
-  } else {
-    for (const p of currentPhotos) entries.push({ p, kind: currentSet.kind, set: currentSet });
-  }
 
   const box = $("detail-thumbs"); box.innerHTML = "";
-  for (const entry of entries) {
-    if (!entry) { box.appendChild(document.createElement("div")); continue; }
+
+  function styledCanvas(cv) {
+    cv.style.width = "100%"; cv.style.borderRadius = "8px"; cv.style.display = "block"; cv.style.background = "#000";
+    return cv;
+  }
+  function buildFigure(entry) {
     const p = entry.p;
     const fig = document.createElement("figure");
-    const url = URL.createObjectURL(p.blob);
-    const img = new Image();
-    img.onload = () => {
-      const cv = correctedCanvas(img, p.tilt);
-      cv.style.width = "100%"; cv.style.borderRadius = "8px"; cv.style.display = "block"; cv.style.background = "#000";
-      fig.insertBefore(cv, fig.firstChild);
-      URL.revokeObjectURL(url);
-    };
-    img.src = url;
     const cap = document.createElement("figcaption");
     cap.textContent = (pairSet ? (entry.kind === "before" ? "ビフォー　" : "アフター　") : "") +
       DIR_JA[p.dir] + "　傾き " + (p.tilt == null ? "—" : p.tilt.toFixed(1) + "°") +
@@ -830,7 +882,56 @@ async function openDetail(setId) {
       img2.src = u2;
     };
     fig.appendChild(dl);
+    return fig;
+  }
+  function addSingle(entry) {
+    const fig = buildFigure(entry);
+    const url = URL.createObjectURL(entry.p.blob);
+    const img = new Image();
+    img.onload = () => {
+      fig.insertBefore(styledCanvas(correctedCanvas(img, entry.p.tilt)), fig.firstChild);
+      URL.revokeObjectURL(url);
+    };
+    img.src = url;
     box.appendChild(fig);
+  }
+  async function addPairRow(bEntry, aEntry) {
+    const [bImg, aImg] = await Promise.all([loadImg(bEntry.p.blob), loadImg(aEntry.p.blob)]);
+    const cvB = correctedCanvas(bImg, bEntry.p.tilt);
+    const cvA = correctedCanvas(aImg, aEntry.p.tilt);
+    const contB = bEntry.p.contour || null;
+    let contA = aEntry.p.contour || null;
+    if (!contA) {
+      // アフターには輪郭が保存されていないので、表示の時にだけ取り直す（保存はしない）。
+      const raw = document.createElement("canvas");
+      raw.width = aImg.naturalWidth || aImg.width; raw.height = aImg.naturalHeight || aImg.height;
+      raw.getContext("2d").drawImage(aImg, 0, 0);
+      contA = await extractContour(raw);
+    }
+    const boxB = personBox(bImg, bEntry.p.tilt, contB);
+    const boxA = personBox(aImg, aEntry.p.tilt, contA);
+    const [dispB, dispA] = (boxB && boxA) ? alignedPair(cvB, boxB, cvA, boxA) : equalHeightPair(cvB, cvA);
+    const figB = buildFigure(bEntry); figB.insertBefore(styledCanvas(dispB), figB.firstChild); box.appendChild(figB);
+    const figA = buildFigure(aEntry); figA.insertBefore(styledCanvas(dispA), figA.firstChild); box.appendChild(figA);
+  }
+
+  if (!pairSet) {
+    for (const p of currentPhotos) addSingle({ p, kind: currentSet.kind, set: currentSet });
+  } else {
+    for (const dir of DIRS) {
+      const b = beforePhotos.find((x) => x.dir === dir) || null;
+      const a = afterPhotos.find((x) => x.dir === dir) || null;
+      if (!b && !a) continue;
+      if (b && a) {
+        await addPairRow({ p: b, kind: "before", set: beforeSet }, { p: a, kind: "after", set: afterSet });
+      } else if (b) {
+        addSingle({ p: b, kind: "before", set: beforeSet });
+        box.appendChild(document.createElement("div"));
+      } else {
+        box.appendChild(document.createElement("div"));
+        addSingle({ p: a, kind: "after", set: afterSet });
+      }
+    }
   }
 }
 
