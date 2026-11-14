@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>姿勢カメラ V17</title>
+<title>姿勢カメラ V18</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -42,7 +42,7 @@
 <body>
 
 <main id="page-top">
-  <h1>姿勢カメラ V17</h1>
+  <h1>姿勢カメラ V18</h1>
   <button id="btn-perms" class="primary">カメラとセンサーの権限を取る</button>
   <p class="muted">カメラ：<span id="perm-cam">未取得</span>　センサー：<span id="perm-sensor">未取得</span></p>
   <p id="cam-err" class="err"></p>
@@ -94,7 +94,7 @@
 
 <script>
 "use strict";
-const APP_VERSION = 17;
+const APP_VERSION = 18;
 const DIRS = ["front", "right", "left", "back"];
 const DIR_JA = { front: "正面", right: "右側面", left: "左側面", back: "背面" };
 const $ = (id) => document.getElementById(id);
@@ -768,8 +768,39 @@ async function openDetail(setId) {
     }
   }
 
+  // 対のセット（ビフォー⇔アフター）があれば、方向ごとに左右に並べて見せる（V18）。
+  let pairSet = null, pairPhotos = [];
+  if (currentSet.kind === "after" && currentSet.baseSetId) {
+    pairSet = await DB.get("sets", currentSet.baseSetId);
+  } else if (currentSet.kind === "before") {
+    const cands = (await DB.all("sets")).filter((s) => s.baseSetId === currentSet.id).sort((a, b) => b.createdAt - a.createdAt);
+    if (cands.length) pairSet = cands[0];
+  }
+  if (pairSet) {
+    pairPhotos = (await DB.bySet(pairSet.id)).sort((a, b) => DIRS.indexOf(a.dir) - DIRS.indexOf(b.dir));
+    $("detail-title").textContent = currentSet.patient + (currentSet.chartNo ? "（No." + currentSet.chartNo + "）" : "") + "（ビフォーとアフター）";
+  }
+  const beforePhotos = currentSet.kind === "before" ? currentPhotos : pairPhotos;
+  const afterPhotos = currentSet.kind === "after" ? currentPhotos : pairPhotos;
+  const beforeSet = currentSet.kind === "before" ? currentSet : pairSet;
+  const afterSet = currentSet.kind === "after" ? currentSet : pairSet;
+  const entries = [];
+  if (pairSet) {
+    for (const dir of DIRS) {
+      const b = beforePhotos.find((x) => x.dir === dir) || null;
+      const a = afterPhotos.find((x) => x.dir === dir) || null;
+      if (!b && !a) continue;
+      entries.push(b ? { p: b, kind: "before", set: beforeSet } : null);
+      entries.push(a ? { p: a, kind: "after", set: afterSet } : null);
+    }
+  } else {
+    for (const p of currentPhotos) entries.push({ p, kind: currentSet.kind, set: currentSet });
+  }
+
   const box = $("detail-thumbs"); box.innerHTML = "";
-  for (const p of currentPhotos) {
+  for (const entry of entries) {
+    if (!entry) { box.appendChild(document.createElement("div")); continue; }
+    const p = entry.p;
     const fig = document.createElement("figure");
     const url = URL.createObjectURL(p.blob);
     const img = new Image();
@@ -781,9 +812,10 @@ async function openDetail(setId) {
     };
     img.src = url;
     const cap = document.createElement("figcaption");
-    cap.textContent = DIR_JA[p.dir] + "　傾き " + (p.tilt == null ? "—" : p.tilt.toFixed(1) + "°") +
+    cap.textContent = (pairSet ? (entry.kind === "before" ? "ビフォー　" : "アフター　") : "") +
+      DIR_JA[p.dir] + "　傾き " + (p.tilt == null ? "—" : p.tilt.toFixed(1) + "°") +
       "　上下 " + (p.pitch == null ? "—" : p.pitch.toFixed(1) + "°") +
-      (currentSet.kind === "before" ? (p.contour ? "　輪郭あり" : "　輪郭なし") : "");
+      (entry.kind === "before" ? (p.contour ? "　輪郭あり" : "　輪郭なし") : "");
     fig.appendChild(cap);
     const dl = document.createElement("button");
     dl.className = "sub"; dl.textContent = "書き出す（補正済み）";
@@ -791,7 +823,9 @@ async function openDetail(setId) {
       const img2 = new Image();
       const u2 = URL.createObjectURL(p.blob);
       img2.onload = () => {
-        correctedCanvas(img2, p.tilt).toBlob((b2) => { downloadBlob(b2, fileBase() + "_" + p.dir + ".jpg"); URL.revokeObjectURL(u2); }, "image/jpeg", 0.92);
+        const d2 = new Date(entry.set.createdAt);
+        const base = "posture_" + d2.getFullYear() + String(d2.getMonth() + 1).padStart(2, "0") + String(d2.getDate()).padStart(2, "0") + "_" + entry.set.kind;
+        correctedCanvas(img2, p.tilt).toBlob((b2) => { downloadBlob(b2, base + "_" + p.dir + ".jpg"); URL.revokeObjectURL(u2); }, "image/jpeg", 0.92);
       };
       img2.src = u2;
     };
