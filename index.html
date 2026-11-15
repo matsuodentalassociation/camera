@@ -3,7 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>姿勢カメラ V19</title>
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#101418">
+<title>姿勢カメラ V21</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -14,9 +18,9 @@
   h2 { font-size: 15px; margin: 16px 0 6px; color: #9fb0bd; }
   .muted { color: #9fb0bd; font-size: 13px; }
   .err { color: #ff9a9a; font-size: 14px; }
-  button { width: 100%; padding: 14px; margin: 6px 0; font-size: 16px; border-radius: 10px; border: 1px solid #3a4754; background: #232e39; color: #eef2f5; }
-  button.primary { background: #0f6fde; border-color: #0f6fde; color: #fff; font-weight: bold; }
-  button.sub { background: transparent; }
+  button { width: 100%; padding: 10px; margin: 5px 0; font-size: 14px; border-radius: 8px; border: 1px solid #3a4754; background: #232e39; color: #eef2f5; }
+  button.primary { background: #0f6fde; border-color: #0f6fde; color: #fff; font-weight: bold; padding: 14px; font-size: 16px; }
+  button.sub { background: transparent; width: auto; padding: 7px 12px; font-size: 13px; margin: 4px 0; }
   button.danger { background: #7a2020; border-color: #7a2020; color: #fff; }
   button:disabled { opacity: .45; }
   input[type="text"] { width: 100%; padding: 12px; font-size: 16px; border-radius: 8px; border: 1px solid #3a4754; background: #0d1116; color: #eef2f5; margin: 6px 0; }
@@ -32,7 +36,7 @@
   #shutter { width: 76px; height: 76px; border-radius: 50%; background: #fff; border: 5px solid #0f6fde; margin: 0 auto; display: block; }
   #shutter:active { background: #bcd8ff; }
   .cam-btns { display: flex; gap: 8px; margin-top: 10px; }
-  .cam-btns button { padding: 10px; font-size: 14px; }
+  .cam-btns button { padding: 10px; font-size: 14px; flex: 1 1 0; }
   .thumbs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .thumbs figure { margin: 0; }
   .thumbs figcaption { font-size: 12px; color: #9fb0bd; margin-top: 4px; line-height: 1.5; }
@@ -42,7 +46,7 @@
 <body>
 
 <main id="page-top">
-  <h1>姿勢カメラ V19</h1>
+  <h1>姿勢カメラ V21</h1>
   <button id="btn-perms" class="primary">カメラとセンサーの権限を取る</button>
   <p class="muted">カメラ：<span id="perm-cam">未取得</span>　センサー：<span id="perm-sensor">未取得</span></p>
   <p id="cam-err" class="err"></p>
@@ -94,7 +98,7 @@
 
 <script>
 "use strict";
-const APP_VERSION = 19;
+const APP_VERSION = 21;
 const DIRS = ["front", "right", "left", "back"];
 const DIR_JA = { front: "正面", right: "右側面", left: "左側面", back: "背面" };
 const $ = (id) => document.getElementById(id);
@@ -713,9 +717,19 @@ async function renderList() {
     }
   }
 }
+// 傾きから90°の倍数を差し引いて、-45〜45°に収めた値を返す（V20）。
+// iPadでは画面の向きの差し引きが90°ずれることがあり、傾きが90°近くに化ける。
+// 写真そのものは縦向きのままなので、90°分は化けた分として捨て、残りだけで補正する。
+function splitTilt(tilt) {
+  const t = tilt || 0;
+  let q = Math.round(t / 90);
+  if (q > 1) q = 1; if (q < -1) q = -1;
+  return { q, rem: t - q * 90 };
+}
 function correctedCanvas(img, tilt) {
+  const rem = splitTilt(tilt).rem;
   const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
-  const ang = -(tilt || 0) * Math.PI / 180;
+  const ang = -rem * Math.PI / 180;
   const t = Math.abs(ang), cos = Math.cos(t), sin = Math.sin(t);
   const rot = document.createElement("canvas");
   rot.width = Math.round(w * cos + h * sin); rot.height = Math.round(w * sin + h * cos);
@@ -738,8 +752,9 @@ function correctedCanvas(img, tilt) {
 // 輪郭（元の写真に対する 0〜1 の点列）を、傾き補正後のキャンバス座標での人の範囲に変換する（V19）。
 function personBox(img, tilt, contour) {
   if (!contour || contour.length < 3) return null;
+  const rem = splitTilt(tilt).rem;
   const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
-  const ang = -(tilt || 0) * Math.PI / 180;
+  const ang = -rem * Math.PI / 180;
   const t = Math.abs(ang), cos = Math.cos(t), sin = Math.sin(t);
   const rotW = Math.round(w * cos + h * sin), rotH = Math.round(w * sin + h * cos);
   let cw = w, ch = h;
