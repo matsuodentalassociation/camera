@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#101418">
-<title>姿勢カメラ V26</title>
+<title>姿勢カメラ V27</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -55,7 +55,7 @@
 <body>
 
 <main id="page-top">
-  <h1>姿勢カメラ V26</h1>
+  <h1>姿勢カメラ V27</h1>
   <button id="btn-perms" class="primary">カメラとセンサーの権限を取る</button>
   <p class="muted">カメラ：<span id="perm-cam">未取得</span>　センサー：<span id="perm-sensor">未取得</span></p>
   <p id="cam-err" class="err"></p>
@@ -109,7 +109,7 @@
 
 <script>
 "use strict";
-const APP_VERSION = 26;
+const APP_VERSION = 27;
 const DIRS = ["front", "right", "left", "back"];
 const DIR_JA = { front: "正面", right: "右側面", left: "左側面", back: "背面" };
 /* ===== 4枠で撮る（V22） =====
@@ -174,12 +174,13 @@ function fmtWhen(ts) {
   return (d.getMonth() + 1) + "/" + d.getDate() + " " + String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
 }
 // 枠の中身：補正した写真を、人物の範囲を中心に 3:4 で切り取って返す。
-function frameCanvas(img, tilt, contour, band) {
-  const cv = correctedCanvas(img, tilt);
+function frameCanvas(img, p) {
+  const cv = correctedCanvas(img, p.tilt);
   const W = 240, H = 320, asp = W / H;
   let sx = 0, sy = 0, sw = cv.width, sh = cv.height;
-  let box = band ? bandBox(cv, img, { band, tilt }) : null;
-  if (!box) box = personBox(img, tilt, contour);
+  let box = p.band ? bandBox(cv, img, p) : null;
+  if (!box) box = lmBox(p);
+  if (!box) box = personBox(img, p.tilt, p.contour || null);
   if (box) {
     let tw = (box.x1 - box.x0) * 1.15, th = (box.y1 - box.y0) * 1.15;
     if (tw / th < asp) tw = th * asp; else th = tw / asp;
@@ -203,14 +204,14 @@ function fillFrame(btn, p) {
   const img = new Image();
   img.onload = async () => {
     let contour = p.contour || null;
-    if (!contour && !p.band) {
+    if (!contour && !p.band && !p.landmarks) {
       const raw = document.createElement("canvas");
       raw.width = img.naturalWidth || img.width; raw.height = img.naturalHeight || img.height;
       raw.getContext("2d").drawImage(img, 0, 0);
       contour = await extractContour(raw);
     }
     btn.innerHTML = "";
-    btn.appendChild(frameCanvas(img, p.tilt, contour, p.band || null));
+    btn.appendChild(frameCanvas(img, p));
     URL.revokeObjectURL(url);
   };
   img.src = url;
@@ -1176,6 +1177,34 @@ function bandBox(cv, img, p) {
   return { x0: 0, y0: yT, x1: cv.width, y1: yB };
 }
 const LM_CONN = [[11,12],[11,13],[13,15],[12,14],[14,16],[11,23],[12,24],[23,24],[23,25],[24,26],[25,27],[26,28],[0,11],[0,12]];
+// ランドマークから「頭頂〜踝」の範囲を返す（V27）。頭頂の点は無いので、鼻の点を基準に上へ余裕を持たせる。
+function lmBox(p) {
+  if (!p.landmarks || p.landmarks.length < 29 || !p.w || !p.h) return null;
+  const pts = p.landmarks.map((lm) => correctedPoint(lm[0], lm[1], p.w, p.h, p.tilt));
+  const nose = pts[0], ankL = pts[27], ankR = pts[28];
+  if (!nose || !ankL || !ankR) return null;
+  let x0 = Infinity, x1 = -Infinity;
+  for (const q of pts) { if (q[0] < x0) x0 = q[0]; if (q[0] > x1) x1 = q[0]; }
+  const ankY = Math.max(ankL[1], ankR[1]);
+  const span = ankY - nose[1];
+  if (!(span > 0) || !(x1 > x0)) return null;
+  return { x0, y0: nose[1] - span * 0.12, x1, y1: ankY + span * 0.08 };
+}
+// 被写体の範囲を、どの写真でも同じ大きさ・同じ位置に置いた表示用キャンバスを返す（V27）。
+function subjectCanvas(cv, box) {
+  const OW = 900, OH = 1200;
+  const span = box.y1 - box.y0;
+  const sc = (OH * 0.94) / span;
+  const ox = OW / 2 - ((box.x0 + box.x1) / 2) * sc;
+  const oy = OH * 0.03 - box.y0 * sc;
+  const out = document.createElement("canvas");
+  out.width = OW; out.height = OH;
+  const ctx = out.getContext("2d");
+  ctx.fillStyle = "#000"; ctx.fillRect(0, 0, OW, OH);
+  ctx.drawImage(cv, ox, oy, cv.width * sc, cv.height * sc);
+  out._tf = { s: sc, ox, oy };
+  return out;
+}
 // 写真とは別のレイヤーとして、ポイントとラインを表示用キャンバスの上に描く。
 function drawLandmarks(cv, p) {
   if (!p.landmarks || !p.landmarks.length || !p.w || !p.h) return;
@@ -1276,8 +1305,12 @@ async function openDetail(setId) {
     const img = new Image();
     img.onload = () => {
       const cv = correctedCanvas(img, entry.p.tilt);
-      if (showLm) drawLandmarks(cv, entry.p);
-      fig.insertBefore(styledCanvas(cv), fig.firstChild);
+      let box = entry.p.band ? bandBox(cv, img, entry.p) : null;
+      if (!box) box = lmBox(entry.p);
+      if (!box) box = personBox(img, entry.p.tilt, entry.p.contour || null);
+      const disp = box ? subjectCanvas(cv, box) : cv;
+      if (showLm) drawLandmarks(disp, entry.p);
+      fig.insertBefore(styledCanvas(disp), fig.firstChild);
       URL.revokeObjectURL(url);
     };
     img.src = url;
@@ -1292,6 +1325,7 @@ async function openDetail(setId) {
       boxB = bandBox(cvB, bImg, bEntry.p);
       boxA = bandBox(cvA, aImg, aEntry.p);
     }
+    if (!boxB || !boxA) { boxB = lmBox(bEntry.p); boxA = lmBox(aEntry.p); }
     if (!boxB || !boxA) {
       const contB = bEntry.p.contour || null;
       let contA = aEntry.p.contour || null;
