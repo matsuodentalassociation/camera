@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#101418">
-<title>姿勢カメラ V25</title>
+<title>姿勢カメラ V26</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -55,7 +55,7 @@
 <body>
 
 <main id="page-top">
-  <h1>姿勢カメラ V25</h1>
+  <h1>姿勢カメラ V26</h1>
   <button id="btn-perms" class="primary">カメラとセンサーの権限を取る</button>
   <p class="muted">カメラ：<span id="perm-cam">未取得</span>　センサー：<span id="perm-sensor">未取得</span></p>
   <p id="cam-err" class="err"></p>
@@ -109,13 +109,15 @@
 
 <script>
 "use strict";
-const APP_VERSION = 25;
+const APP_VERSION = 26;
 const DIRS = ["front", "right", "left", "back"];
 const DIR_JA = { front: "正面", right: "右側面", left: "左側面", back: "背面" };
 /* ===== 4枠で撮る（V22） =====
    ビフォーの下にアフターの空枠が並び、枠を押すとその面だけを撮る。
    撮るごとに保存され、写真は人物中心のトリミングで枠に入る。 */
 const FRAME_DIRS = ["left", "front", "right", "back"];
+// 頭頂と踝を合わせる水平ラインの位置（プレビューの高さに対する割合、V26）。
+const LINE_TOP = 0.12, LINE_BOT = 0.88;
 let group = { started: false, beforeId: null, patientObj: null };
 let sel = { key: "before:draft", kind: "before", setId: null, dir: "front", photoId: null };
 async function selectFrame(el) {
@@ -172,11 +174,12 @@ function fmtWhen(ts) {
   return (d.getMonth() + 1) + "/" + d.getDate() + " " + String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
 }
 // 枠の中身：補正した写真を、人物の範囲を中心に 3:4 で切り取って返す。
-function frameCanvas(img, tilt, contour) {
+function frameCanvas(img, tilt, contour, band) {
   const cv = correctedCanvas(img, tilt);
   const W = 240, H = 320, asp = W / H;
   let sx = 0, sy = 0, sw = cv.width, sh = cv.height;
-  const box = personBox(img, tilt, contour);
+  let box = band ? bandBox(cv, img, { band, tilt }) : null;
+  if (!box) box = personBox(img, tilt, contour);
   if (box) {
     let tw = (box.x1 - box.x0) * 1.15, th = (box.y1 - box.y0) * 1.15;
     if (tw / th < asp) tw = th * asp; else th = tw / asp;
@@ -200,14 +203,14 @@ function fillFrame(btn, p) {
   const img = new Image();
   img.onload = async () => {
     let contour = p.contour || null;
-    if (!contour) {
+    if (!contour && !p.band) {
       const raw = document.createElement("canvas");
       raw.width = img.naturalWidth || img.width; raw.height = img.naturalHeight || img.height;
       raw.getContext("2d").drawImage(img, 0, 0);
       contour = await extractContour(raw);
     }
     btn.innerHTML = "";
-    btn.appendChild(frameCanvas(img, p.tilt, contour));
+    btn.appendChild(frameCanvas(img, p.tilt, contour, p.band || null));
     URL.revokeObjectURL(url);
   };
   img.src = url;
@@ -352,7 +355,7 @@ async function saveSingleShot(shot) {
     w: shot.canvas.width, h: shot.canvas.height,
     tilt: shot.tilt, pitch: shot.pitch,
     alpha: shot.alpha, beta: shot.beta, gamma: shot.gamma, contour,
-    landmarks: shot.landmarks || null, chosen: true, createdAt: Date.now()
+    landmarks: shot.landmarks || null, band: shot.band || null, chosen: true, createdAt: Date.now()
   });
   if (!contour) toast("保存しました（輪郭は取れませんでした）", 4000);
   else toast("保存しました");
@@ -801,6 +804,16 @@ function drawLoop() {
     ctx.stroke();
   }
 
+  // 頭頂と踝を合わせるための水平ライン（V26）。プレビューだけに出し、写真には焼き込まない。
+  if (S.mode !== "ocr") {
+    ctx.strokeStyle = "rgba(46,230,107,0.95)";
+    ctx.lineWidth = Math.max(3, cw * 0.005);
+    ctx.beginPath();
+    const ly1 = Math.round(ch * LINE_TOP), ly2 = Math.round(ch * LINE_BOT);
+    ctx.moveTo(0, ly1); ctx.lineTo(cw, ly1);
+    ctx.moveTo(0, ly2); ctx.lineTo(cw, ly2);
+    ctx.stroke();
+  }
   if (pose) {
     try {
       const nowTs = performance.now();
@@ -917,11 +930,20 @@ async function takePhoto() {
       return;
     }
     if (S.single) {
+      let band = null;
+      const cvEl = $("cam-canvas");
+      if (cvEl.width > 10 && cvEl.height > 10 && v.videoHeight) {
+        const t3 = coverTransform(v.videoWidth, v.videoHeight, cvEl.width, cvEl.height);
+        const fT = ((LINE_TOP * cvEl.height - t3.oy) / t3.s) / v.videoHeight;
+        const fB = ((LINE_BOT * cvEl.height - t3.oy) / t3.s) / v.videoHeight;
+        if (fB > fT) band = [Math.max(0, fT), Math.min(1, fB)];
+      }
       const shot = {
         dir: S.single.dir, canvas: c,
         tilt: tiltDeg(orient), pitch: pitchDeg(orient),
         alpha: orient.alpha, beta: orient.beta, gamma: orient.gamma,
-        landmarks: S.landmarks ? S.landmarks.map((p) => [Math.round(p.x * 10000) / 10000, Math.round(p.y * 10000) / 10000]) : null
+        landmarks: S.landmarks ? S.landmarks.map((p) => [Math.round(p.x * 10000) / 10000, Math.round(p.y * 10000) / 10000]) : null,
+        band
       };
       stopCamera();
       $("cam-wrap").hidden = true;
@@ -1144,6 +1166,15 @@ function correctedPoint(x, y, w, h, tilt) {
   const rx = cx * ca - cy * sa, ry = cx * sa + cy * ca;
   return [rx + rotW / 2 - offX, ry + rotH / 2 - offY];
 }
+// ラインで合わせた範囲を、補正後キャンバス座標の「人の範囲」と同じ形で返す（V26）。
+function bandBox(cv, img, p) {
+  if (!p.band) return null;
+  const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+  const yT = correctedPoint(0.5, p.band[0], w, h, p.tilt)[1];
+  const yB = correctedPoint(0.5, p.band[1], w, h, p.tilt)[1];
+  if (!(yB > yT)) return null;
+  return { x0: 0, y0: yT, x1: cv.width, y1: yB };
+}
 const LM_CONN = [[11,12],[11,13],[13,15],[12,14],[14,16],[11,23],[12,24],[23,24],[23,25],[24,26],[25,27],[26,28],[0,11],[0,12]];
 // 写真とは別のレイヤーとして、ポイントとラインを表示用キャンバスの上に描く。
 function drawLandmarks(cv, p) {
@@ -1256,17 +1287,24 @@ async function openDetail(setId) {
     const [bImg, aImg] = await Promise.all([loadImg(bEntry.p.blob), loadImg(aEntry.p.blob)]);
     const cvB = correctedCanvas(bImg, bEntry.p.tilt);
     const cvA = correctedCanvas(aImg, aEntry.p.tilt);
-    const contB = bEntry.p.contour || null;
-    let contA = aEntry.p.contour || null;
-    if (!contA) {
-      // アフターには輪郭が保存されていないので、表示の時にだけ取り直す（保存はしない）。
-      const raw = document.createElement("canvas");
-      raw.width = aImg.naturalWidth || aImg.width; raw.height = aImg.naturalHeight || aImg.height;
-      raw.getContext("2d").drawImage(aImg, 0, 0);
-      contA = await extractContour(raw);
+    let boxB = null, boxA = null;
+    if (bEntry.p.band && aEntry.p.band) {
+      boxB = bandBox(cvB, bImg, bEntry.p);
+      boxA = bandBox(cvA, aImg, aEntry.p);
     }
-    const boxB = personBox(bImg, bEntry.p.tilt, contB);
-    const boxA = personBox(aImg, aEntry.p.tilt, contA);
+    if (!boxB || !boxA) {
+      const contB = bEntry.p.contour || null;
+      let contA = aEntry.p.contour || null;
+      if (!contA) {
+        // アフターには輪郭が保存されていないので、表示の時にだけ取り直す（保存はしない）。
+        const raw = document.createElement("canvas");
+        raw.width = aImg.naturalWidth || aImg.width; raw.height = aImg.naturalHeight || aImg.height;
+        raw.getContext("2d").drawImage(aImg, 0, 0);
+        contA = await extractContour(raw);
+      }
+      boxB = personBox(bImg, bEntry.p.tilt, contB);
+      boxA = personBox(aImg, aEntry.p.tilt, contA);
+    }
     const [dispB, dispA] = (boxB && boxA) ? alignedPair(cvB, boxB, cvA, boxA) : equalHeightPair(cvB, cvA);
     if (showLm) { drawLandmarks(dispB, bEntry.p); drawLandmarks(dispA, aEntry.p); }
     const figB = buildFigure(bEntry); figB.insertBefore(styledCanvas(dispB), figB.firstChild); box.appendChild(figB);
