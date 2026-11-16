@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#101418">
-<title>姿勢カメラ V21</title>
+<title>姿勢カメラ V25</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -37,6 +37,15 @@
   #shutter:active { background: #bcd8ff; }
   .cam-btns { display: flex; gap: 8px; margin-top: 10px; }
   .cam-btns button { padding: 10px; font-size: 14px; flex: 1 1 0; }
+  .row-label { font-size: 13px; color: #9fb0bd; margin: 12px 0 2px; }
+  .frame-row { display: flex; gap: 6px; margin: 4px 0 8px; }
+  .frame { flex: 1 1 0; aspect-ratio: 3 / 4; padding: 0; margin: 0; overflow: hidden; display: flex; align-items: center; justify-content: center; font-size: 13px; color: #9fb0bd; }
+  .frame canvas { width: 100%; height: 100%; display: block; }
+  .frame.sel { border: 2px solid #0f6fde; background: #22374d; color: #fff; }
+  .frame-cols { display: flex; gap: 6px; margin: 4px 0 8px; }
+  .frame-col { flex: 1 1 0; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .frame-col .frame { flex: 0 0 auto; width: 100%; }
+  .confirm-btn { width: 100%; margin: 0; }
   .thumbs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .thumbs figure { margin: 0; }
   .thumbs figcaption { font-size: 12px; color: #9fb0bd; margin-top: 4px; line-height: 1.5; }
@@ -46,7 +55,7 @@
 <body>
 
 <main id="page-top">
-  <h1>姿勢カメラ V21</h1>
+  <h1>姿勢カメラ V25</h1>
   <button id="btn-perms" class="primary">カメラとセンサーの権限を取る</button>
   <p class="muted">カメラ：<span id="perm-cam">未取得</span>　センサー：<span id="perm-sensor">未取得</span></p>
   <p id="cam-err" class="err"></p>
@@ -61,6 +70,7 @@
   </form>
   <div id="patient-list"></div>
   <button id="btn-start-before" class="primary" disabled>ビフォーを撮る</button>
+  <div id="shoot-area"></div>
   <div id="after-area"></div>
   <h2>記録</h2>
   <div id="set-list"></div>
@@ -72,6 +82,7 @@
   <h1 id="detail-title">記録</h1>
   <p id="pitch-note" class="err" hidden></p>
   <div class="thumbs" id="detail-thumbs"></div>
+  <button id="btn-lm" class="sub">ポイント・ラインを表示</button>
   <button id="btn-export-json">記録データ（傾き・輪郭）を書き出す</button>
   <button id="btn-delete-set" class="danger">この記録を削除する</button>
 </main>
@@ -98,9 +109,258 @@
 
 <script>
 "use strict";
-const APP_VERSION = 21;
+const APP_VERSION = 25;
 const DIRS = ["front", "right", "left", "back"];
 const DIR_JA = { front: "正面", right: "右側面", left: "左側面", back: "背面" };
+/* ===== 4枠で撮る（V22） =====
+   ビフォーの下にアフターの空枠が並び、枠を押すとその面だけを撮る。
+   撮るごとに保存され、写真は人物中心のトリミングで枠に入る。 */
+const FRAME_DIRS = ["left", "front", "right", "back"];
+let group = { started: false, beforeId: null, patientObj: null };
+let sel = { key: "before:draft", kind: "before", setId: null, dir: "front", photoId: null };
+async function selectFrame(el) {
+  const setId = el.dataset.setid || null;
+  const dir = el.dataset.dir;
+  const photoId = el.dataset.photoid || null;
+  sel = { key: el.dataset.row, kind: el.dataset.kind, setId, dir, photoId };
+  if (photoId && setId) {
+    await setChosen(setId, dir, photoId);
+    await renderShoot();
+  } else {
+    normalizeSel();
+  }
+}
+function normalizeSel() {
+  const frames = Array.from(document.querySelectorAll(".frame"));
+  if (!frames.length) return;
+  const same = (el) => el.dataset.row === sel.key && el.dataset.dir === sel.dir && (el.dataset.photoid || null) === (sel.photoId || null);
+  let cur = frames.find(same);
+  if (!cur) {
+    cur = frames.find((el) => el.dataset.photoid) || frames[0];
+    sel = { key: cur.dataset.row, kind: cur.dataset.kind, setId: cur.dataset.setid || null, dir: cur.dataset.dir, photoId: cur.dataset.photoid || null };
+  }
+  frames.forEach((el) => el.classList.toggle("sel", el === cur));
+  $("btn-start-before").textContent = sel.kind === "after" ? "アフターを撮る" : "ビフォーを撮る";
+}
+// 患者が変わったら、枠の組もその患者の新しい組に切り替える（前の組の記録は一覧に残る）。
+function syncGroupPatient() {
+  const pid = group.patientObj ? group.patientObj.id : null;
+  const cid = currentPatient ? currentPatient.id : null;
+  if (pid === cid) return;
+  group = { started: true, beforeId: null, patientObj: currentPatient ? { id: currentPatient.id, name: currentPatient.name, chartNo: currentPatient.chartNo || "" } : null };
+  sel = { key: "before:draft", kind: "before", setId: null, dir: "front", photoId: null };
+  saveGroupRef();
+  renderShoot();
+}
+function curDir() { return S.single ? S.single.dir : DIRS[S.step]; }
+function saveGroupRef() {
+  try {
+    if (group.beforeId) localStorage.setItem("pc-group", group.beforeId);
+    else localStorage.removeItem("pc-group");
+  } catch (e) {}
+}
+async function restoreGroup() {
+  let id = null;
+  try { id = localStorage.getItem("pc-group"); } catch (e) {}
+  if (!id) return;
+  const s = await DB.get("sets", id);
+  if (!s || s.kind !== "before") return;
+  group = { started: true, beforeId: s.id, patientObj: { id: s.patientId, name: s.patient, chartNo: s.chartNo || "" } };
+}
+function fmtWhen(ts) {
+  const d = new Date(ts);
+  return (d.getMonth() + 1) + "/" + d.getDate() + " " + String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+}
+// 枠の中身：補正した写真を、人物の範囲を中心に 3:4 で切り取って返す。
+function frameCanvas(img, tilt, contour) {
+  const cv = correctedCanvas(img, tilt);
+  const W = 240, H = 320, asp = W / H;
+  let sx = 0, sy = 0, sw = cv.width, sh = cv.height;
+  const box = personBox(img, tilt, contour);
+  if (box) {
+    let tw = (box.x1 - box.x0) * 1.15, th = (box.y1 - box.y0) * 1.15;
+    if (tw / th < asp) tw = th * asp; else th = tw / asp;
+    if (tw > cv.width) { th *= cv.width / tw; tw = cv.width; }
+    if (th > cv.height) { tw *= cv.height / th; th = cv.height; }
+    const cx = (box.x0 + box.x1) / 2, cy = (box.y0 + box.y1) / 2;
+    sx = Math.min(Math.max(cx - tw / 2, 0), Math.max(0, cv.width - tw));
+    sy = Math.min(Math.max(cy - th / 2, 0), Math.max(0, cv.height - th));
+    sw = tw; sh = th;
+  } else {
+    if (sw / sh < asp) { const nw = sh * asp; sx = (sw - nw) / 2; sw = nw; }
+    else { const nh = sw / asp; sy = (sh - nh) / 2; sh = nh; }
+  }
+  const out = document.createElement("canvas");
+  out.width = W; out.height = H;
+  out.getContext("2d").drawImage(cv, sx, sy, sw, sh, 0, 0, W, H);
+  return out;
+}
+function fillFrame(btn, p) {
+  const url = URL.createObjectURL(p.blob);
+  const img = new Image();
+  img.onload = async () => {
+    let contour = p.contour || null;
+    if (!contour) {
+      const raw = document.createElement("canvas");
+      raw.width = img.naturalWidth || img.width; raw.height = img.naturalHeight || img.height;
+      raw.getContext("2d").drawImage(img, 0, 0);
+      contour = await extractContour(raw);
+    }
+    btn.innerHTML = "";
+    btn.appendChild(frameCanvas(img, p.tilt, contour));
+    URL.revokeObjectURL(url);
+  };
+  img.src = url;
+}
+async function renderShoot() {
+  const area = $("shoot-area");
+  area.innerHTML = "";
+  const rows = [];
+  let beforeSet = null;
+  if (group.beforeId) beforeSet = await DB.get("sets", group.beforeId);
+  rows.push({ kind: "before", set: beforeSet, setId: group.beforeId });
+  if (group.beforeId) {
+    const afters = (await DB.all("sets")).filter((x) => x.baseSetId === group.beforeId).sort((a, b) => a.createdAt - b.createdAt);
+    for (const a of afters) rows.push({ kind: "after", set: a, setId: a.id });
+    rows.push({ kind: "after", set: null, setId: null });
+  }
+  for (const row of rows) {
+    const lab = document.createElement("div");
+    lab.className = "row-label";
+    lab.textContent = (row.kind === "before" ? "ビフォー" : "アフター") + (row.set ? "　" + fmtWhen(row.set.createdAt) : "");
+    area.appendChild(lab);
+    const cols = document.createElement("div");
+    cols.className = "frame-cols";
+    const photos = row.setId ? await DB.bySet(row.setId) : [];
+    for (const dir of FRAME_DIRS) {
+      const col = document.createElement("div");
+      col.className = "frame-col";
+      const list = photos.filter((x) => x.dir === dir).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+      const chosen = list.find((x) => x.chosen) || list[list.length - 1] || null;
+      col.appendChild(mkFrame(row, dir, chosen));
+      if (list.length) {
+        for (const p of list) {
+          if (chosen && p.id === chosen.id) continue;
+          col.appendChild(mkFrame(row, dir, p));
+        }
+        col.appendChild(mkFrame(row, dir, null));
+      }
+      if (list.length >= 2) {
+        const cf = document.createElement("button");
+        cf.className = "sub confirm-btn";
+        cf.textContent = "確定";
+        cf.onclick = () => confirmDir(row.setId, dir);
+        col.appendChild(cf);
+      }
+      cols.appendChild(col);
+    }
+    area.appendChild(cols);
+  }
+  normalizeSel();
+}
+function mkFrame(row, dir, photo) {
+  const f = document.createElement("button");
+  f.className = "frame";
+  f.dataset.row = row.kind + ":" + (row.setId || "draft");
+  f.dataset.kind = row.kind;
+  f.dataset.setid = row.setId || "";
+  f.dataset.dir = dir;
+  f.dataset.photoid = photo ? photo.id : "";
+  f.dataset.filled = photo ? "1" : "0";
+  if (photo) fillFrame(f, photo); else f.textContent = DIR_JA[dir];
+  f.onclick = () => selectFrame(f);
+  return f;
+}
+async function setChosen(setId, dir, photoId) {
+  const photos = await DB.bySet(setId);
+  for (const p of photos) {
+    if (p.dir !== dir) continue;
+    const c = p.id === photoId;
+    if (!!p.chosen !== c) { p.chosen = c; await DB.put("photos", p); }
+  }
+}
+async function confirmDir(setId, dir) {
+  if (!setId) return;
+  const photos = await DB.bySet(setId);
+  const list = photos.filter((p) => p.dir === dir);
+  if (list.length < 2) return;
+  const keep = list.find((p) => p.chosen) || list[list.length - 1];
+  for (const p of list) if (p.id !== keep.id) await DB.del("photos", p.id);
+  if (sel.setId === setId && sel.dir === dir) sel.photoId = keep.id;
+  toast("1枚だけ残しました");
+  await renderShoot();
+  await renderList();
+}
+async function beginSingle(kind, setId, dir) {
+  if (!PERMS.cam) { toast("先に権限を取ってください"); return; }
+  if (kind === "after" && !group.beforeId) { toast("先にビフォーを撮ってください"); return; }
+  if (kind === "before" && !setId) {
+    const nm = $("reg-name").value.trim(), cn = $("reg-chart").value.trim();
+    if (nm && cn) await registerPatient();
+    if (currentPatient) {
+      group.patientObj = { id: currentPatient.id, name: currentPatient.name, chartNo: currentPatient.chartNo || "" };
+    }
+    if (!group.patientObj) { toast("患者が決まっていません"); return; }
+  }
+  S.mode = kind; S.single = { kind, setId: setId || null, dir };
+  S.landmarks = null; S.basePhotos = {};
+  if (kind === "after" && group.beforeId) {
+    const ps = await DB.bySet(group.beforeId);
+    for (const p of ps) S.basePhotos[p.dir] = p;
+  }
+  $("page-top").hidden = true; $("page-detail").hidden = true;
+  $("cam-wrap").hidden = false;
+  $("cam-dir").textContent = DIR_JA[dir] + (kind === "after" ? "（アフター）" : "（ビフォー）");
+  $("btn-cam-skip").style.display = "none";
+  $("btn-cam-finish").style.display = "none";
+  try {
+    await startCamera();
+  } catch (e) {
+    console.warn(e);
+    cancelShoot();
+    const el = $("cam-err");
+    if (el) el.textContent = "カメラを開けませんでした（" + (e && (e.name || e.message) || e) + "）";
+    return;
+  }
+  loadAI();
+}
+async function saveSingleShot(shot) {
+  toast("保存しています…", 4000);
+  const sg = S.single; S.single = null;
+  let setId = sg.setId;
+  if (!setId) {
+    setId = uid();
+    const po = group.patientObj || currentPatient || { id: null, name: "", chartNo: "" };
+    await DB.put("sets", {
+      id: setId,
+      patientId: po.id || null,
+      patient: po.name || "（名前なし）",
+      chartNo: po.chartNo || "",
+      kind: sg.kind,
+      baseSetId: sg.kind === "after" ? group.beforeId : null,
+      createdAt: Date.now(), appVersion: APP_VERSION
+    });
+    if (sg.kind === "before") { group.beforeId = setId; saveGroupRef(); }
+  }
+  const olds = (await DB.bySet(setId)).filter((p) => p.dir === shot.dir);
+  for (const o of olds) if (o.chosen) { o.chosen = false; await DB.put("photos", o); }
+  const contour = await extractContour(shot.canvas);
+  const blob = await new Promise((res) => shot.canvas.toBlob(res, "image/jpeg", 0.92));
+  const photoId = uid();
+  await DB.put("photos", {
+    id: photoId, setId, dir: shot.dir, blob,
+    w: shot.canvas.width, h: shot.canvas.height,
+    tilt: shot.tilt, pitch: shot.pitch,
+    alpha: shot.alpha, beta: shot.beta, gamma: shot.gamma, contour,
+    landmarks: shot.landmarks || null, chosen: true, createdAt: Date.now()
+  });
+  if (!contour) toast("保存しました（輪郭は取れませんでした）", 4000);
+  else toast("保存しました");
+  sel = { key: sg.kind + ":" + setId, kind: sg.kind, setId, dir: shot.dir, photoId };
+  await renderShoot();
+  await renderList();
+}
+
 const $ = (id) => document.getElementById(id);
 function toast(msg, ms) {
   const t = $("toast"); t.textContent = msg; t.style.display = "block";
@@ -260,7 +520,7 @@ async function renderPatients() {
     const b = document.createElement("button");
     b.className = "sub"; b.style.flex = "1 1 auto"; b.style.minWidth = "0";
     b.textContent = (currentPatient && currentPatient.id === p.id ? "● " : "") + p.name + "（No." + p.chartNo + "）";
-    b.onclick = async () => { currentPatient = p; localStorage.setItem("pc-patient", p.id); await renderPatients(); };
+    b.onclick = async () => { currentPatient = p; localStorage.setItem("pc-patient", p.id); await renderPatients(); syncGroupPatient(); };
     const del = document.createElement("button");
     del.className = "sub"; del.textContent = "削除"; del.style.flex = "0 0 auto"; del.style.width = "auto";
     del.onclick = async () => {
@@ -271,6 +531,7 @@ async function renderPatients() {
         localStorage.removeItem("pc-patient");
       }
       await renderPatients();
+      syncGroupPatient();
     };
     row.appendChild(b); row.appendChild(del);
     box.appendChild(row);
@@ -314,6 +575,7 @@ async function registerPatient() {
   currentPatient = p;
   localStorage.setItem("pc-patient", p.id);
   await renderPatients();
+  syncGroupPatient();
   if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
   toast("登録しました");
 }
@@ -471,7 +733,7 @@ async function extractContour(canvas) {
 /* ===== 撮影 ===== */
 const S = {
   mode: null, patient: "", baseSetId: null, basePhotos: {},
-  step: 0, shots: [], stream: null, video: null, raf: 0,
+  step: 0, shots: [], single: null, stream: null, video: null, raf: 0,
   landmarks: null, facing: "environment", busy: false, gridMode: 0
 };
 function coverTransform(vw, vh, cw, ch) {
@@ -569,7 +831,7 @@ function drawLoop() {
     }
   }
 
-  const base = S.mode === "after" ? S.basePhotos[DIRS[S.step]] : null;
+  const base = S.mode === "after" ? S.basePhotos[curDir()] : null;
   if (base && base.contour && base.contour.length > 2) {
     const bw = base.w || vw, bh = base.h || vh;
     const t2 = coverTransform(bw, bh, cw, ch);
@@ -587,7 +849,7 @@ function drawLoop() {
   let info = "傾き " + (t == null ? "—" : t.toFixed(1) + "°") + (aiState ? "　" + aiState : "");
   // アフター撮影で、その方向のビフォー輪郭が無い時は画面に出す（黙って何も出ない形にしない）。
   if (S.mode === "after") {
-    const bp = S.basePhotos[DIRS[S.step]];
+    const bp = S.basePhotos[curDir()];
     if (!bp || !bp.contour) info += "　輪郭なし";
   }
   $("cam-info").textContent = info;
@@ -618,6 +880,8 @@ async function beginShoot(mode, baseSetId, patientObj) {
   loadAI();
 }
 function updateCamDir() {
+  $("btn-cam-skip").style.display = "";
+  $("btn-cam-finish").style.display = "";
   if (S.mode === "ocr") {
     $("cam-dir").textContent = "カルテの名前と番号を写す";
     $("btn-cam-finish").disabled = true;
@@ -627,6 +891,7 @@ function updateCamDir() {
   $("btn-cam-finish").disabled = S.shots.length === 0;
 }
 function cancelShoot() {
+  S.single = null;
   stopCamera();
   $("cam-wrap").hidden = true;
   $("page-top").hidden = false;
@@ -649,6 +914,19 @@ async function takePhoto() {
       $("cam-wrap").hidden = true;
       $("page-top").hidden = false;
       await runOcr(c);
+      return;
+    }
+    if (S.single) {
+      const shot = {
+        dir: S.single.dir, canvas: c,
+        tilt: tiltDeg(orient), pitch: pitchDeg(orient),
+        alpha: orient.alpha, beta: orient.beta, gamma: orient.gamma,
+        landmarks: S.landmarks ? S.landmarks.map((p) => [Math.round(p.x * 10000) / 10000, Math.round(p.y * 10000) / 10000]) : null
+      };
+      stopCamera();
+      $("cam-wrap").hidden = true;
+      $("page-top").hidden = false;
+      await saveSingleShot(shot);
       return;
     }
     S.shots.push({
@@ -695,6 +973,7 @@ async function finishShoot() {
 
 /* ===== 一覧・詳細 ===== */
 let currentSet = null, currentPhotos = [];
+let showLm = false;
 async function renderList() {
   const sets = (await DB.all("sets")).sort((a, b) => b.createdAt - a.createdAt);
   const box = $("set-list"); box.innerHTML = "";
@@ -712,7 +991,12 @@ async function renderList() {
       const ab = document.createElement("button");
       ab.textContent = "アフターを撮る（" + s.patient + "）";
       ab.disabled = !PERMS.cam;
-      ab.onclick = () => beginShoot("after", s.id, { id: s.patientId, name: s.patient, chartNo: s.chartNo || "" });
+      ab.onclick = async () => {
+        group = { started: true, beforeId: s.id, patientObj: { id: s.patientId, name: s.patient, chartNo: s.chartNo || "" } };
+        saveGroupRef();
+        await renderShoot();
+        $("shoot-area").scrollIntoView({ behavior: "smooth", block: "start" });
+      };
       area.appendChild(ab);
     }
   }
@@ -791,6 +1075,7 @@ function alignedPair(cvB, boxB, cvA, boxA) {
     ctx.fillStyle = "#000"; ctx.fillRect(0, 0, OW, OH);
     const ox = OW / 2 - ((box.x0 + box.x1) / 2) * s;
     ctx.drawImage(cv, ox, oy, cv.width * s, cv.height * s);
+    out._tf = { s, ox, oy };
     return out;
   };
   return [mk(cvB, sB, boxB, oyB), mk(cvA, sA, boxA, oyA)];
@@ -805,6 +1090,7 @@ function equalHeightPair(cvB, cvA) {
     const ctx = out.getContext("2d");
     ctx.fillStyle = "#000"; ctx.fillRect(0, 0, OW, OH);
     ctx.drawImage(cv, (OW - cv.width * s) / 2, 0, cv.width * s, cv.height * s);
+    out._tf = { s, ox: (OW - cv.width * s) / 2, oy: 0 };
     return out;
   };
   return [mk(cvB, sB), mk(cvA, sA)];
@@ -829,14 +1115,68 @@ function fileBase() {
   const d = new Date(currentSet.createdAt);
   return "posture_" + d.getFullYear() + String(d.getMonth() + 1).padStart(2, "0") + String(d.getDate()).padStart(2, "0") + "_" + currentSet.kind;
 }
+// 複数枚ある面は、本命（chosen）の1枚だけを返す。無ければ最新の1枚。
+function pickChosen(list) {
+  const byDir = {};
+  const sorted = [...list].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+  for (const p of sorted) {
+    const cur = byDir[p.dir];
+    if (!cur || p.chosen || !cur.chosen) byDir[p.dir] = p;
+  }
+  return Object.values(byDir);
+}
+// ランドマークの点（元の写真に対する0〜1）を、傾き補正後のキャンバス座標に移す。
+function correctedPoint(x, y, w, h, tilt) {
+  const rem = splitTilt(tilt).rem;
+  const ang = -rem * Math.PI / 180;
+  const t = Math.abs(ang), cos = Math.cos(t), sin = Math.sin(t);
+  const rotW = Math.round(w * cos + h * sin), rotH = Math.round(w * sin + h * cos);
+  let cw = w, ch = h;
+  const det = cos * cos - sin * sin;
+  if (sin > 0.0001 && det > 0.2) {
+    const xx = ((w / 2) * cos - (h / 2) * sin) / det;
+    const yy = ((h / 2) * cos - (w / 2) * sin) / det;
+    if (xx > 10 && yy > 10) { cw = Math.floor(2 * xx); ch = Math.floor(2 * yy); }
+  }
+  const offX = (rotW - cw) / 2, offY = (rotH - ch) / 2;
+  const ca = Math.cos(ang), sa = Math.sin(ang);
+  const cx = x * w - w / 2, cy = y * h - h / 2;
+  const rx = cx * ca - cy * sa, ry = cx * sa + cy * ca;
+  return [rx + rotW / 2 - offX, ry + rotH / 2 - offY];
+}
+const LM_CONN = [[11,12],[11,13],[13,15],[12,14],[14,16],[11,23],[12,24],[23,24],[23,25],[24,26],[25,27],[26,28],[0,11],[0,12]];
+// 写真とは別のレイヤーとして、ポイントとラインを表示用キャンバスの上に描く。
+function drawLandmarks(cv, p) {
+  if (!p.landmarks || !p.landmarks.length || !p.w || !p.h) return;
+  const tf = cv._tf || { s: 1, ox: 0, oy: 0 };
+  const pts = p.landmarks.map((lm) => {
+    const c = correctedPoint(lm[0], lm[1], p.w, p.h, p.tilt);
+    return [c[0] * tf.s + tf.ox, c[1] * tf.s + tf.oy];
+  });
+  const ctx = cv.getContext("2d");
+  ctx.strokeStyle = "rgba(64,200,255,.9)";
+  ctx.fillStyle = "rgba(255,220,64,.95)";
+  ctx.lineWidth = Math.max(2, cv.width * 0.004);
+  ctx.beginPath();
+  for (const c of LM_CONN) {
+    const a = pts[c[0]], b = pts[c[1]];
+    if (!a || !b) continue;
+    ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]);
+  }
+  ctx.stroke();
+  for (const pt of pts) {
+    ctx.beginPath(); ctx.arc(pt[0], pt[1], Math.max(3, cv.width * 0.006), 0, Math.PI * 2); ctx.fill();
+  }
+}
 async function openDetail(setId) {
   currentSet = await DB.get("sets", setId);
   if (!currentSet) return;
-  currentPhotos = (await DB.bySet(setId)).sort((a, b) => DIRS.indexOf(a.dir) - DIRS.indexOf(b.dir));
+  currentPhotos = pickChosen(await DB.bySet(setId)).sort((a, b) => DIRS.indexOf(a.dir) - DIRS.indexOf(b.dir));
   $("page-top").hidden = true;
   $("page-detail").hidden = false;
   $("detail-title").textContent = currentSet.patient + (currentSet.chartNo ? "（No." + currentSet.chartNo + "）" : "") + "（" + (currentSet.kind === "before" ? "ビフォー" : "アフター") + "）";
 
+  $("btn-lm").textContent = showLm ? "ポイント・ラインを消す" : "ポイント・ラインを表示";
   const note = $("pitch-note");
   note.hidden = true;
   if (currentSet.kind === "after" && currentSet.baseSetId) {
@@ -861,7 +1201,7 @@ async function openDetail(setId) {
     if (cands.length) pairSet = cands[0];
   }
   if (pairSet) {
-    pairPhotos = (await DB.bySet(pairSet.id)).sort((a, b) => DIRS.indexOf(a.dir) - DIRS.indexOf(b.dir));
+    pairPhotos = pickChosen(await DB.bySet(pairSet.id)).sort((a, b) => DIRS.indexOf(a.dir) - DIRS.indexOf(b.dir));
     $("detail-title").textContent = currentSet.patient + (currentSet.chartNo ? "（No." + currentSet.chartNo + "）" : "") + "（ビフォーとアフター）";
   }
   const beforePhotos = currentSet.kind === "before" ? currentPhotos : pairPhotos;
@@ -904,7 +1244,9 @@ async function openDetail(setId) {
     const url = URL.createObjectURL(entry.p.blob);
     const img = new Image();
     img.onload = () => {
-      fig.insertBefore(styledCanvas(correctedCanvas(img, entry.p.tilt)), fig.firstChild);
+      const cv = correctedCanvas(img, entry.p.tilt);
+      if (showLm) drawLandmarks(cv, entry.p);
+      fig.insertBefore(styledCanvas(cv), fig.firstChild);
       URL.revokeObjectURL(url);
     };
     img.src = url;
@@ -926,6 +1268,7 @@ async function openDetail(setId) {
     const boxB = personBox(bImg, bEntry.p.tilt, contB);
     const boxA = personBox(aImg, aEntry.p.tilt, contA);
     const [dispB, dispA] = (boxB && boxA) ? alignedPair(cvB, boxB, cvA, boxA) : equalHeightPair(cvB, cvA);
+    if (showLm) { drawLandmarks(dispB, bEntry.p); drawLandmarks(dispA, aEntry.p); }
     const figB = buildFigure(bEntry); figB.insertBefore(styledCanvas(dispB), figB.firstChild); box.appendChild(figB);
     const figA = buildFigure(aEntry); figA.insertBefore(styledCanvas(dispA), figA.firstChild); box.appendChild(figA);
   }
@@ -976,10 +1319,7 @@ $("btn-ocr").onclick = async () => {
 };
 $("btn-start-before").onclick = async () => {
   const ce = $("cam-err"); if (ce) ce.textContent = "";
-  const nm = $("reg-name").value.trim(), cn = $("reg-chart").value.trim();
-  if (nm && cn) await registerPatient();
-  if (!currentPatient) { toast("患者が決まっていません"); return; }
-  beginShoot("before", null, currentPatient);
+  await beginSingle(sel.kind, sel.setId, sel.dir);
 };
 $("shutter").onclick = takePhoto;
 $("btn-cam-cancel").onclick = cancelShoot;
@@ -995,6 +1335,10 @@ $("btn-cam-flip").onclick = async () => {
   try { await startCamera(); } catch (e) { toast("切り替えられませんでした"); }
 };
 $("btn-back-top").onclick = () => { $("page-detail").hidden = true; $("page-top").hidden = false; };
+$("btn-lm").onclick = async () => {
+  showLm = !showLm;
+  if (currentSet) await openDetail(currentSet.id);
+};
 $("btn-export-json").onclick = () => {
   if (!currentSet) return;
   const data = {
@@ -1151,6 +1495,8 @@ if (updBtn) updBtn.onclick = () => { checkUpdate(true); };
   await renderPatients();
   updatePermUI();
   await renderList();
+  await restoreGroup();
+  await renderShoot();
   renderUpdate();
   checkUpdate(false);
   setInterval(() => { checkUpdate(false); }, UPDATE_EVERY_MS);
