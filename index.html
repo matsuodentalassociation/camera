@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#101418">
-<title>姿勢カメラ V27</title>
+<title>姿勢カメラ V30</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -39,7 +39,8 @@
   .cam-btns button { padding: 10px; font-size: 14px; flex: 1 1 0; }
   .row-label { font-size: 13px; color: #9fb0bd; margin: 12px 0 2px; }
   .frame-row { display: flex; gap: 6px; margin: 4px 0 8px; }
-  .frame { flex: 1 1 0; aspect-ratio: 3 / 4; padding: 0; margin: 0; overflow: hidden; display: flex; align-items: center; justify-content: center; font-size: 13px; color: #9fb0bd; }
+  .frame { flex: 1 1 0; aspect-ratio: 3 / 4; padding: 0; margin: 0; overflow: hidden; display: flex; align-items: center; justify-content: center; font-size: 13px; color: #9fb0bd; position: relative; }
+  .date-stamp { position: absolute; top: 2px; left: 2px; background: rgba(0,0,0,.65); color: #fff; font-size: 10px; padding: 1px 4px; border-radius: 3px; pointer-events: none; z-index: 2; }
   .frame canvas { width: 100%; height: 100%; display: block; }
   .frame.sel { border: 2px solid #0f6fde; background: #22374d; color: #fff; }
   .frame-cols { display: flex; gap: 6px; margin: 4px 0 8px; }
@@ -49,13 +50,18 @@
   .thumbs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .thumbs figure { margin: 0; }
   .thumbs figcaption { font-size: 12px; color: #9fb0bd; margin-top: 4px; line-height: 1.5; }
+  @media (orientation: landscape) {
+    .thumbs:not(.pair-grid) { grid-template-columns: repeat(4, 1fr); }
+  }
+  #detail-mode-row button.on { background: #2f6fb2; color: #fff; }
+  .set-group-label { font-weight: 700; margin: 14px 0 6px; color: #cfe3f5; }
   #toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: #0f6fde; color: #fff; padding: 10px 18px; border-radius: 999px; font-size: 14px; z-index: 50; display: none; white-space: nowrap; }
 </style>
 </head>
 <body>
 
 <main id="page-top">
-  <h1>姿勢カメラ V27</h1>
+  <h1>姿勢カメラ V30</h1>
   <button id="btn-perms" class="primary">カメラとセンサーの権限を取る</button>
   <p class="muted">カメラ：<span id="perm-cam">未取得</span>　センサー：<span id="perm-sensor">未取得</span></p>
   <p id="cam-err" class="err"></p>
@@ -80,6 +86,10 @@
 <main id="page-detail" hidden>
   <button id="btn-back-top" class="sub">← 戻る</button>
   <h1 id="detail-title">記録</h1>
+  <div id="detail-mode-row" hidden>
+    <button id="btn-mode-pair" class="sub">同じ面を並べる</button>
+    <button id="btn-mode-sets" class="sub">4面づつ表示</button>
+  </div>
   <p id="pitch-note" class="err" hidden></p>
   <div class="thumbs" id="detail-thumbs"></div>
   <button id="btn-lm" class="sub">ポイント・ラインを表示</button>
@@ -109,18 +119,33 @@
 
 <script>
 "use strict";
-const APP_VERSION = 27;
+const APP_VERSION = 30;
 const DIRS = ["front", "right", "left", "back"];
 const DIR_JA = { front: "正面", right: "右側面", left: "左側面", back: "背面" };
 /* ===== 4枠で撮る（V22） =====
    ビフォーの下にアフターの空枠が並び、枠を押すとその面だけを撮る。
    撮るごとに保存され、写真は人物中心のトリミングで枠に入る。 */
 const FRAME_DIRS = ["left", "front", "right", "back"];
-// 頭頂と踝を合わせる水平ラインの位置（プレビューの高さに対する割合、V26）。
-const LINE_TOP = 0.12, LINE_BOT = 0.88;
 let group = { started: false, beforeId: null, patientObj: null };
 let sel = { key: "before:draft", kind: "before", setId: null, dir: "front", photoId: null };
+let choiceSel = null;
+let choiceOpenDir = null;
+function fmtDay(ts) {
+  if (!ts) return "";
+  const d = new Date(ts);
+  return (d.getMonth() + 1) + "/" + d.getDate();
+}
 async function selectFrame(el) {
+  if (el.dataset.choice === "1") {
+    const dir = el.dataset.dir;
+    if (!choiceSel || choiceSel.dir !== dir || choiceSel.beforeId !== group.beforeId) {
+      choiceSel = { dir, kind: null, setId: null, beforeId: group.beforeId };
+    }
+    choiceOpenDir = (choiceOpenDir === dir) ? null : dir;
+    sel = { key: el.dataset.row, kind: choiceSel.kind || "choice", setId: choiceSel.setId, dir, photoId: null, choice: true };
+    await renderShoot();
+    return;
+  }
   const setId = el.dataset.setid || null;
   const dir = el.dataset.dir;
   const photoId = el.dataset.photoid || null;
@@ -135,6 +160,15 @@ async function selectFrame(el) {
 function normalizeSel() {
   const frames = Array.from(document.querySelectorAll(".frame"));
   if (!frames.length) return;
+  if (sel.choice) {
+    const cf = frames.find((el) => el.dataset.choice === "1" && el.dataset.dir === sel.dir);
+    if (cf) {
+      frames.forEach((el) => el.classList.toggle("sel", el === cf));
+      $("btn-start-before").textContent = sel.kind === "after" ? "アフターを撮る" : (sel.kind === "before" ? "ビフォーを撮る" : "撮る");
+      return;
+    }
+    sel = { key: "before:draft", kind: "before", setId: null, dir: "front", photoId: null };
+  }
   const same = (el) => el.dataset.row === sel.key && el.dataset.dir === sel.dir && (el.dataset.photoid || null) === (sel.photoId || null);
   let cur = frames.find(same);
   if (!cur) {
@@ -178,8 +212,7 @@ function frameCanvas(img, p) {
   const cv = correctedCanvas(img, p.tilt);
   const W = 240, H = 320, asp = W / H;
   let sx = 0, sy = 0, sw = cv.width, sh = cv.height;
-  let box = p.band ? bandBox(cv, img, p) : null;
-  if (!box) box = lmBox(p);
+  let box = lmBox(p);
   if (!box) box = personBox(img, p.tilt, p.contour || null);
   if (box) {
     let tw = (box.x1 - box.x0) * 1.15, th = (box.y1 - box.y0) * 1.15;
@@ -204,14 +237,16 @@ function fillFrame(btn, p) {
   const img = new Image();
   img.onload = async () => {
     let contour = p.contour || null;
-    if (!contour && !p.band && !p.landmarks) {
+    if (!contour && !p.landmarks) {
       const raw = document.createElement("canvas");
       raw.width = img.naturalWidth || img.width; raw.height = img.naturalHeight || img.height;
       raw.getContext("2d").drawImage(img, 0, 0);
       contour = await extractContour(raw);
     }
+    const st = btn.querySelector(".date-stamp");
     btn.innerHTML = "";
     btn.appendChild(frameCanvas(img, p));
+    if (st) btn.appendChild(st);
     URL.revokeObjectURL(url);
   };
   img.src = url;
@@ -226,7 +261,6 @@ async function renderShoot() {
   if (group.beforeId) {
     const afters = (await DB.all("sets")).filter((x) => x.baseSetId === group.beforeId).sort((a, b) => a.createdAt - b.createdAt);
     for (const a of afters) rows.push({ kind: "after", set: a, setId: a.id });
-    rows.push({ kind: "after", set: null, setId: null });
   }
   for (const row of rows) {
     const lab = document.createElement("div");
@@ -241,13 +275,27 @@ async function renderShoot() {
       col.className = "frame-col";
       const list = photos.filter((x) => x.dir === dir).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
       const chosen = list.find((x) => x.chosen) || list[list.length - 1] || null;
-      col.appendChild(mkFrame(row, dir, chosen));
+      col.appendChild(mkFrame(row, dir, chosen, row.kind === "before" && list.length === 1));
       if (list.length) {
         for (const p of list) {
           if (chosen && p.id === chosen.id) continue;
           col.appendChild(mkFrame(row, dir, p));
         }
-        col.appendChild(mkFrame(row, dir, null));
+        if (row.kind === "before") {
+          col.appendChild(mkChoiceFrame(dir));
+          if (choiceOpenDir === dir) {
+            const b1 = document.createElement("button");
+            b1.className = "sub confirm-btn"; b1.textContent = "ビフォー取り直し";
+            b1.onclick = () => pickChoice("before");
+            col.appendChild(b1);
+            const b2 = document.createElement("button");
+            b2.className = "sub confirm-btn"; b2.textContent = "アフター";
+            b2.onclick = () => pickChoice("after");
+            col.appendChild(b2);
+          }
+        } else {
+          col.appendChild(mkFrame(row, dir, null));
+        }
       }
       if (list.length >= 2) {
         const cf = document.createElement("button");
@@ -262,7 +310,7 @@ async function renderShoot() {
   }
   normalizeSel();
 }
-function mkFrame(row, dir, photo) {
+function mkFrame(row, dir, photo, settled) {
   const f = document.createElement("button");
   f.className = "frame";
   f.dataset.row = row.kind + ":" + (row.setId || "draft");
@@ -271,9 +319,52 @@ function mkFrame(row, dir, photo) {
   f.dataset.dir = dir;
   f.dataset.photoid = photo ? photo.id : "";
   f.dataset.filled = photo ? "1" : "0";
-  if (photo) fillFrame(f, photo); else f.textContent = DIR_JA[dir];
+  if (photo) {
+    fillFrame(f, photo);
+    if (settled) {
+      const sp = document.createElement("span");
+      sp.className = "date-stamp";
+      sp.textContent = fmtDay(photo.createdAt || (row.set ? row.set.createdAt : null));
+      f.appendChild(sp);
+    }
+  } else f.textContent = DIR_JA[dir];
   f.onclick = () => selectFrame(f);
   return f;
+}
+function mkChoiceFrame(dir) {
+  const f = document.createElement("button");
+  f.className = "frame";
+  f.dataset.row = "before:" + (group.beforeId || "draft");
+  f.dataset.choice = "1";
+  f.dataset.dir = dir;
+  f.dataset.photoid = "";
+  f.dataset.filled = "0";
+  const cs = (choiceSel && choiceSel.dir === dir && choiceSel.beforeId === group.beforeId) ? choiceSel : null;
+  f.dataset.kind = cs && cs.kind ? cs.kind : "choice";
+  f.dataset.setid = cs && cs.setId ? cs.setId : "";
+  f.textContent = cs && cs.kind ? (cs.kind === "before" ? "取り直し" : "アフター") : "＋";
+  f.onclick = () => selectFrame(f);
+  return f;
+}
+async function resolveAfterTarget() {
+  if (!group.beforeId) return null;
+  const afters = (await DB.all("sets")).filter((x) => x.baseSetId === group.beforeId).sort((a, b) => b.createdAt - a.createdAt);
+  if (!afters.length) return null;
+  const latest = afters[0];
+  const d = new Date(latest.createdAt), now = new Date();
+  const sameDay = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+  return sameDay ? latest.id : null;
+}
+async function pickChoice(kind) {
+  const dir = choiceOpenDir;
+  if (!dir) return;
+  let setId = null;
+  if (kind === "before") setId = group.beforeId;
+  else setId = await resolveAfterTarget();
+  choiceSel = { dir, kind, setId, beforeId: group.beforeId };
+  choiceOpenDir = null;
+  sel = { key: "before:" + (group.beforeId || "draft"), kind, setId, dir, photoId: null, choice: true };
+  await renderShoot();
 }
 async function setChosen(setId, dir, photoId) {
   const photos = await DB.bySet(setId);
@@ -356,10 +447,11 @@ async function saveSingleShot(shot) {
     w: shot.canvas.width, h: shot.canvas.height,
     tilt: shot.tilt, pitch: shot.pitch,
     alpha: shot.alpha, beta: shot.beta, gamma: shot.gamma, contour,
-    landmarks: shot.landmarks || null, band: shot.band || null, chosen: true, createdAt: Date.now()
+    landmarks: shot.landmarks || null, chosen: true, createdAt: Date.now()
   });
   if (!contour) toast("保存しました（輪郭は取れませんでした）", 4000);
   else toast("保存しました");
+  choiceSel = null; choiceOpenDir = null;
   sel = { key: sg.kind + ":" + setId, kind: sg.kind, setId, dir: shot.dir, photoId };
   await renderShoot();
   await renderList();
@@ -805,16 +897,6 @@ function drawLoop() {
     ctx.stroke();
   }
 
-  // 頭頂と踝を合わせるための水平ライン（V26）。プレビューだけに出し、写真には焼き込まない。
-  if (S.mode !== "ocr") {
-    ctx.strokeStyle = "rgba(46,230,107,0.95)";
-    ctx.lineWidth = Math.max(3, cw * 0.005);
-    ctx.beginPath();
-    const ly1 = Math.round(ch * LINE_TOP), ly2 = Math.round(ch * LINE_BOT);
-    ctx.moveTo(0, ly1); ctx.lineTo(cw, ly1);
-    ctx.moveTo(0, ly2); ctx.lineTo(cw, ly2);
-    ctx.stroke();
-  }
   if (pose) {
     try {
       const nowTs = performance.now();
@@ -931,20 +1013,11 @@ async function takePhoto() {
       return;
     }
     if (S.single) {
-      let band = null;
-      const cvEl = $("cam-canvas");
-      if (cvEl.width > 10 && cvEl.height > 10 && v.videoHeight) {
-        const t3 = coverTransform(v.videoWidth, v.videoHeight, cvEl.width, cvEl.height);
-        const fT = ((LINE_TOP * cvEl.height - t3.oy) / t3.s) / v.videoHeight;
-        const fB = ((LINE_BOT * cvEl.height - t3.oy) / t3.s) / v.videoHeight;
-        if (fB > fT) band = [Math.max(0, fT), Math.min(1, fB)];
-      }
       const shot = {
         dir: S.single.dir, canvas: c,
         tilt: tiltDeg(orient), pitch: pitchDeg(orient),
         alpha: orient.alpha, beta: orient.beta, gamma: orient.gamma,
-        landmarks: S.landmarks ? S.landmarks.map((p) => [Math.round(p.x * 10000) / 10000, Math.round(p.y * 10000) / 10000]) : null,
-        band
+        landmarks: S.landmarks ? S.landmarks.map((p) => [Math.round(p.x * 10000) / 10000, Math.round(p.y * 10000) / 10000]) : null
       };
       stopCamera();
       $("cam-wrap").hidden = true;
@@ -997,6 +1070,7 @@ async function finishShoot() {
 /* ===== 一覧・詳細 ===== */
 let currentSet = null, currentPhotos = [];
 let showLm = false;
+let detailMode = localStorage.getItem("pc-detail-mode") || "pair";
 async function renderList() {
   const sets = (await DB.all("sets")).sort((a, b) => b.createdAt - a.createdAt);
   const box = $("set-list"); box.innerHTML = "";
@@ -1167,15 +1241,6 @@ function correctedPoint(x, y, w, h, tilt) {
   const rx = cx * ca - cy * sa, ry = cx * sa + cy * ca;
   return [rx + rotW / 2 - offX, ry + rotH / 2 - offY];
 }
-// ラインで合わせた範囲を、補正後キャンバス座標の「人の範囲」と同じ形で返す（V26）。
-function bandBox(cv, img, p) {
-  if (!p.band) return null;
-  const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
-  const yT = correctedPoint(0.5, p.band[0], w, h, p.tilt)[1];
-  const yB = correctedPoint(0.5, p.band[1], w, h, p.tilt)[1];
-  if (!(yB > yT)) return null;
-  return { x0: 0, y0: yT, x1: cv.width, y1: yB };
-}
 const LM_CONN = [[11,12],[11,13],[13,15],[12,14],[14,16],[11,23],[12,24],[23,24],[23,25],[24,26],[25,27],[26,28],[0,11],[0,12]];
 // ランドマークから「頭頂〜踝」の範囲を返す（V27）。頭頂の点は無いので、鼻の点を基準に上へ余裕を持たせる。
 function lmBox(p) {
@@ -1299,14 +1364,13 @@ async function openDetail(setId) {
     fig.appendChild(dl);
     return fig;
   }
-  function addSingle(entry) {
+  function addSingle(entry, container) {
     const fig = buildFigure(entry);
     const url = URL.createObjectURL(entry.p.blob);
     const img = new Image();
     img.onload = () => {
       const cv = correctedCanvas(img, entry.p.tilt);
-      let box = entry.p.band ? bandBox(cv, img, entry.p) : null;
-      if (!box) box = lmBox(entry.p);
+      let box = lmBox(entry.p);
       if (!box) box = personBox(img, entry.p.tilt, entry.p.contour || null);
       const disp = box ? subjectCanvas(cv, box) : cv;
       if (showLm) drawLandmarks(disp, entry.p);
@@ -1314,18 +1378,13 @@ async function openDetail(setId) {
       URL.revokeObjectURL(url);
     };
     img.src = url;
-    box.appendChild(fig);
+    (container || box).appendChild(fig);
   }
   async function addPairRow(bEntry, aEntry) {
     const [bImg, aImg] = await Promise.all([loadImg(bEntry.p.blob), loadImg(aEntry.p.blob)]);
     const cvB = correctedCanvas(bImg, bEntry.p.tilt);
     const cvA = correctedCanvas(aImg, aEntry.p.tilt);
-    let boxB = null, boxA = null;
-    if (bEntry.p.band && aEntry.p.band) {
-      boxB = bandBox(cvB, bImg, bEntry.p);
-      boxA = bandBox(cvA, aImg, aEntry.p);
-    }
-    if (!boxB || !boxA) { boxB = lmBox(bEntry.p); boxA = lmBox(aEntry.p); }
+    let boxB = lmBox(bEntry.p), boxA = lmBox(aEntry.p);
     if (!boxB || !boxA) {
       const contB = bEntry.p.contour || null;
       let contA = aEntry.p.contour || null;
@@ -1345,8 +1404,31 @@ async function openDetail(setId) {
     const figA = buildFigure(aEntry); figA.insertBefore(styledCanvas(dispA), figA.firstChild); box.appendChild(figA);
   }
 
+  const modeRow = $("detail-mode-row");
+  modeRow.hidden = !pairSet;
+  $("btn-mode-pair").classList.toggle("on", detailMode === "pair");
+  $("btn-mode-sets").classList.toggle("on", detailMode === "sets");
+  box.className = !pairSet ? "thumbs" : (detailMode === "pair" ? "thumbs pair-grid" : "detail-groups");
+
   if (!pairSet) {
     for (const p of currentPhotos) addSingle({ p, kind: currentSet.kind, set: currentSet });
+  } else if (detailMode === "sets") {
+    const afterSets = (await DB.all("sets")).filter((x) => x.baseSetId === beforeSet.id).sort((a, b) => a.createdAt - b.createdAt);
+    const groups = [{ set: beforeSet, kind: "before" }];
+    for (const as of afterSets) groups.push({ set: as, kind: "after" });
+    for (const g of groups) {
+      const photos = pickChosen(await DB.bySet(g.set.id)).sort((a, b) => DIRS.indexOf(a.dir) - DIRS.indexOf(b.dir));
+      if (!photos.length) continue;
+      const lab = document.createElement("div");
+      lab.className = "set-group-label";
+      const gd = new Date(g.set.createdAt);
+      lab.textContent = (g.kind === "before" ? "ビフォー" : "アフター") + "　" + (gd.getMonth() + 1) + "/" + gd.getDate() + " " + String(gd.getHours()).padStart(2, "0") + ":" + String(gd.getMinutes()).padStart(2, "0");
+      box.appendChild(lab);
+      const grid = document.createElement("div");
+      grid.className = "thumbs";
+      box.appendChild(grid);
+      for (const p of photos) addSingle({ p, kind: g.kind, set: g.set }, grid);
+    }
   } else {
     for (const dir of DIRS) {
       const b = beforePhotos.find((x) => x.dir === dir) || null;
@@ -1391,6 +1473,7 @@ $("btn-ocr").onclick = async () => {
 };
 $("btn-start-before").onclick = async () => {
   const ce = $("cam-err"); if (ce) ce.textContent = "";
+  if (sel.choice && sel.kind === "choice") { toast("ビフォー取り直しかアフターを選んでください"); return; }
   await beginSingle(sel.kind, sel.setId, sel.dir);
 };
 $("shutter").onclick = takePhoto;
@@ -1409,6 +1492,16 @@ $("btn-cam-flip").onclick = async () => {
 $("btn-back-top").onclick = () => { $("page-detail").hidden = true; $("page-top").hidden = false; };
 $("btn-lm").onclick = async () => {
   showLm = !showLm;
+  if (currentSet) await openDetail(currentSet.id);
+};
+$("btn-mode-pair").onclick = async () => {
+  detailMode = "pair";
+  localStorage.setItem("pc-detail-mode", "pair");
+  if (currentSet) await openDetail(currentSet.id);
+};
+$("btn-mode-sets").onclick = async () => {
+  detailMode = "sets";
+  localStorage.setItem("pc-detail-mode", "sets");
   if (currentSet) await openDetail(currentSet.id);
 };
 $("btn-export-json").onclick = () => {
