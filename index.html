@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#101418">
-<title>姿勢カメラ V30</title>
+<title>姿勢カメラ V32</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -38,6 +38,9 @@
   .cam-btns { display: flex; gap: 8px; margin-top: 10px; }
   .cam-btns button { padding: 10px; font-size: 14px; flex: 1 1 0; }
   .row-label { font-size: 13px; color: #9fb0bd; margin: 12px 0 2px; }
+  .fixed-block { position: sticky; top: 0; z-index: 6; background: #101418; padding-bottom: 6px; border-bottom: 1px solid #3a4754; }
+  .row-tools { float: right; }
+  .mini-btn { padding: 2px 10px; font-size: 13px; margin: 0 0 0 6px; }
   .frame-row { display: flex; gap: 6px; margin: 4px 0 8px; }
   .frame { flex: 1 1 0; aspect-ratio: 3 / 4; padding: 0; margin: 0; overflow: hidden; display: flex; align-items: center; justify-content: center; font-size: 13px; color: #9fb0bd; position: relative; }
   .date-stamp { position: absolute; top: 2px; left: 2px; background: rgba(0,0,0,.65); color: #fff; font-size: 10px; padding: 1px 4px; border-radius: 3px; pointer-events: none; z-index: 2; }
@@ -61,7 +64,7 @@
 <body>
 
 <main id="page-top">
-  <h1>姿勢カメラ V30</h1>
+  <h1>姿勢カメラ V32</h1>
   <button id="btn-perms" class="primary">カメラとセンサーの権限を取る</button>
   <p class="muted">カメラ：<span id="perm-cam">未取得</span>　センサー：<span id="perm-sensor">未取得</span></p>
   <p id="cam-err" class="err"></p>
@@ -75,9 +78,8 @@
   <input id="reg-chart" type="text" inputmode="numeric" autocomplete="off" enterkeyhint="done">
   </form>
   <div id="patient-list"></div>
-  <button id="btn-start-before" class="primary" disabled>ビフォーを撮る</button>
+  <button id="btn-start-before" class="primary" disabled>写真を撮る</button>
   <div id="shoot-area"></div>
-  <div id="after-area"></div>
   <h2>記録</h2>
   <div id="set-list"></div>
   <p id="list-empty" class="muted">まだありません</p>
@@ -119,37 +121,34 @@
 
 <script>
 "use strict";
-const APP_VERSION = 30;
+const APP_VERSION = 32;
 const DIRS = ["front", "right", "left", "back"];
 const DIR_JA = { front: "正面", right: "右側面", left: "左側面", back: "背面" };
 /* ===== 4枠で撮る（V22） =====
    ビフォーの下にアフターの空枠が並び、枠を押すとその面だけを撮る。
    撮るごとに保存され、写真は人物中心のトリミングで枠に入る。 */
 const FRAME_DIRS = ["left", "front", "right", "back"];
-let group = { started: false, beforeId: null, patientObj: null };
-let sel = { key: "before:draft", kind: "before", setId: null, dir: "front", photoId: null };
-let choiceSel = null;
-let choiceOpenDir = null;
+let group = { started: true, roundId: null, patientObj: null };
+let sel = { key: "round:draft", setId: null, dir: "front", photoId: null };
 function fmtDay(ts) {
   if (!ts) return "";
   const d = new Date(ts);
   return (d.getMonth() + 1) + "/" + d.getDate();
 }
+function samePatient(s, po) {
+  if (!s || !po) return false;
+  if (po.id && s.patientId) return s.patientId === po.id;
+  return (s.patient || "") === (po.name || "") && (s.chartNo || "") === (po.chartNo || "");
+}
+async function patientRounds(po) {
+  const all = await DB.all("sets");
+  return all.filter((s) => samePatient(s, po)).sort((a, b) => a.createdAt - b.createdAt);
+}
 async function selectFrame(el) {
-  if (el.dataset.choice === "1") {
-    const dir = el.dataset.dir;
-    if (!choiceSel || choiceSel.dir !== dir || choiceSel.beforeId !== group.beforeId) {
-      choiceSel = { dir, kind: null, setId: null, beforeId: group.beforeId };
-    }
-    choiceOpenDir = (choiceOpenDir === dir) ? null : dir;
-    sel = { key: el.dataset.row, kind: choiceSel.kind || "choice", setId: choiceSel.setId, dir, photoId: null, choice: true };
-    await renderShoot();
-    return;
-  }
   const setId = el.dataset.setid || null;
   const dir = el.dataset.dir;
   const photoId = el.dataset.photoid || null;
-  sel = { key: el.dataset.row, kind: el.dataset.kind, setId, dir, photoId };
+  sel = { key: el.dataset.row, setId, dir, photoId };
   if (photoId && setId) {
     await setChosen(setId, dir, photoId);
     await renderShoot();
@@ -160,48 +159,43 @@ async function selectFrame(el) {
 function normalizeSel() {
   const frames = Array.from(document.querySelectorAll(".frame"));
   if (!frames.length) return;
-  if (sel.choice) {
-    const cf = frames.find((el) => el.dataset.choice === "1" && el.dataset.dir === sel.dir);
-    if (cf) {
-      frames.forEach((el) => el.classList.toggle("sel", el === cf));
-      $("btn-start-before").textContent = sel.kind === "after" ? "アフターを撮る" : (sel.kind === "before" ? "ビフォーを撮る" : "撮る");
-      return;
-    }
-    sel = { key: "before:draft", kind: "before", setId: null, dir: "front", photoId: null };
-  }
   const same = (el) => el.dataset.row === sel.key && el.dataset.dir === sel.dir && (el.dataset.photoid || null) === (sel.photoId || null);
   let cur = frames.find(same);
   if (!cur) {
     cur = frames.find((el) => el.dataset.photoid) || frames[0];
-    sel = { key: cur.dataset.row, kind: cur.dataset.kind, setId: cur.dataset.setid || null, dir: cur.dataset.dir, photoId: cur.dataset.photoid || null };
+    sel = { key: cur.dataset.row, setId: cur.dataset.setid || null, dir: cur.dataset.dir, photoId: cur.dataset.photoid || null };
   }
   frames.forEach((el) => el.classList.toggle("sel", el === cur));
-  $("btn-start-before").textContent = sel.kind === "after" ? "アフターを撮る" : "ビフォーを撮る";
 }
-// 患者が変わったら、枠の組もその患者の新しい組に切り替える（前の組の記録は一覧に残る）。
+// 患者が変わったら、枠の組もその患者に切り替える（前の患者の記録は履歴に残る）。
 function syncGroupPatient() {
   const pid = group.patientObj ? group.patientObj.id : null;
   const cid = currentPatient ? currentPatient.id : null;
   if (pid === cid) return;
-  group = { started: true, beforeId: null, patientObj: currentPatient ? { id: currentPatient.id, name: currentPatient.name, chartNo: currentPatient.chartNo || "" } : null };
-  sel = { key: "before:draft", kind: "before", setId: null, dir: "front", photoId: null };
+  group = { started: true, roundId: null, patientObj: currentPatient ? { id: currentPatient.id, name: currentPatient.name, chartNo: currentPatient.chartNo || "" } : null };
+  sel = { key: "round:draft", setId: null, dir: "front", photoId: null };
   saveGroupRef();
   renderShoot();
 }
 function curDir() { return S.single ? S.single.dir : DIRS[S.step]; }
 function saveGroupRef() {
   try {
-    if (group.beforeId) localStorage.setItem("pc-group", group.beforeId);
-    else localStorage.removeItem("pc-group");
+    if (group.roundId) localStorage.setItem("pc-round", group.roundId);
+    else localStorage.removeItem("pc-round");
   } catch (e) {}
+}
+function sameDay(ts, now) {
+  const d = new Date(ts);
+  return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
 }
 async function restoreGroup() {
   let id = null;
-  try { id = localStorage.getItem("pc-group"); } catch (e) {}
+  try { id = localStorage.getItem("pc-round"); } catch (e) {}
   if (!id) return;
   const s = await DB.get("sets", id);
-  if (!s || s.kind !== "before") return;
-  group = { started: true, beforeId: s.id, patientObj: { id: s.patientId, name: s.patient, chartNo: s.chartNo || "" } };
+  if (!s) return;
+  group.patientObj = { id: s.patientId, name: s.patient, chartNo: s.chartNo || "" };
+  if (sameDay(s.createdAt, new Date())) group.roundId = s.id;
 }
 function fmtWhen(ts) {
   const d = new Date(ts);
@@ -251,70 +245,105 @@ function fillFrame(btn, p) {
   };
   img.src = url;
 }
+function orderKey(po) { return "pc-order-" + (po && po.id ? po.id : ((po && po.name) || "") + "|" + ((po && po.chartNo) || "")); }
+function loadOrder(po) { try { const v = JSON.parse(localStorage.getItem(orderKey(po)) || "[]"); return Array.isArray(v) ? v : []; } catch (e) { return []; } }
+function saveOrder(po, ids) { try { localStorage.setItem(orderKey(po), JSON.stringify(ids)); } catch (e) {} }
+function sortMiddle(po, middle) {
+  const stored = loadOrder(po);
+  return middle.sort((a, b) => {
+    const ia = stored.indexOf(a.id), ib = stored.indexOf(b.id);
+    if (ia >= 0 && ib >= 0) return ia - ib;
+    if (ia >= 0) return -1;
+    if (ib >= 0) return 1;
+    return a.createdAt - b.createdAt;
+  });
+}
+async function currentRound(rounds) {
+  if (group.roundId) { const c = rounds.find((s) => s.id === group.roundId); if (c) return c; }
+  if (rounds.length && sameDay(rounds[rounds.length - 1].createdAt, new Date())) return rounds[rounds.length - 1];
+  return null;
+}
 async function renderShoot() {
   const area = $("shoot-area");
   area.innerHTML = "";
-  const rows = [];
-  let beforeSet = null;
-  if (group.beforeId) beforeSet = await DB.get("sets", group.beforeId);
-  rows.push({ kind: "before", set: beforeSet, setId: group.beforeId });
-  if (group.beforeId) {
-    const afters = (await DB.all("sets")).filter((x) => x.baseSetId === group.beforeId).sort((a, b) => a.createdAt - b.createdAt);
-    for (const a of afters) rows.push({ kind: "after", set: a, setId: a.id });
-  }
-  for (const row of rows) {
+  const po = group.patientObj || (currentPatient ? { id: currentPatient.id, name: currentPatient.name, chartNo: currentPatient.chartNo || "" } : null);
+  const rounds = po ? await patientRounds(po) : [];
+  const first = rounds.length ? rounds[0] : null;
+  const cur = await currentRound(rounds);
+  const buildRow = async (set, opts) => {
+    const wrap = document.createElement("div");
+    if (opts && opts.fixed) wrap.className = "fixed-block";
     const lab = document.createElement("div");
     lab.className = "row-label";
-    lab.textContent = (row.kind === "before" ? "ビフォー" : "アフター") + (row.set ? "　" + fmtWhen(row.set.createdAt) : "");
-    area.appendChild(lab);
+    lab.textContent = set ? fmtWhen(set.createdAt) : "新しい回";
+    if (opts && opts.tools && set) {
+      const tools = document.createElement("span");
+      tools.className = "row-tools";
+      const up = document.createElement("button");
+      up.className = "sub mini-btn"; up.textContent = "↑ 上へ";
+      up.onclick = () => moveHistoryRow(po, set.id, -1);
+      const dn = document.createElement("button");
+      dn.className = "sub mini-btn"; dn.textContent = "↓ 下へ";
+      dn.onclick = () => moveHistoryRow(po, set.id, 1);
+      tools.appendChild(up); tools.appendChild(dn);
+      lab.appendChild(tools);
+    }
+    wrap.appendChild(lab);
     const cols = document.createElement("div");
     cols.className = "frame-cols";
-    const photos = row.setId ? await DB.bySet(row.setId) : [];
+    const photos = set ? await DB.bySet(set.id) : [];
+    const rowRef = { set, setId: set ? set.id : null };
     for (const dir of FRAME_DIRS) {
       const col = document.createElement("div");
       col.className = "frame-col";
       const list = photos.filter((x) => x.dir === dir).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
       const chosen = list.find((x) => x.chosen) || list[list.length - 1] || null;
-      col.appendChild(mkFrame(row, dir, chosen, row.kind === "before" && list.length === 1));
+      col.appendChild(mkFrame(rowRef, dir, chosen, list.length === 1));
       if (list.length) {
         for (const p of list) {
           if (chosen && p.id === chosen.id) continue;
-          col.appendChild(mkFrame(row, dir, p));
+          col.appendChild(mkFrame(rowRef, dir, p));
         }
-        if (row.kind === "before") {
-          col.appendChild(mkChoiceFrame(dir));
-          if (choiceOpenDir === dir) {
-            const b1 = document.createElement("button");
-            b1.className = "sub confirm-btn"; b1.textContent = "ビフォー取り直し";
-            b1.onclick = () => pickChoice("before");
-            col.appendChild(b1);
-            const b2 = document.createElement("button");
-            b2.className = "sub confirm-btn"; b2.textContent = "アフター";
-            b2.onclick = () => pickChoice("after");
-            col.appendChild(b2);
-          }
-        } else {
-          col.appendChild(mkFrame(row, dir, null));
-        }
+        col.appendChild(mkFrame(rowRef, dir, null));
       }
       if (list.length >= 2) {
         const cf = document.createElement("button");
         cf.className = "sub confirm-btn";
         cf.textContent = "確定";
-        cf.onclick = () => confirmDir(row.setId, dir);
+        cf.onclick = () => confirmDir(set.id, dir);
         col.appendChild(cf);
       }
       cols.appendChild(col);
     }
-    area.appendChild(cols);
-  }
+    wrap.appendChild(cols);
+    return wrap;
+  };
+  // 最初の回は一番上に固定（スクロールしても動かない）。
+  if (first) area.appendChild(await buildRow(first, { fixed: true }));
+  // 途中の回は、その下に並び、順番を入れ替えられる。
+  const middle = sortMiddle(po, rounds.filter((s) => s !== first && s !== cur));
+  for (const s of middle) area.appendChild(await buildRow(s, { tools: true }));
+  // 一番下は今日の回。無ければ新しい回の空枠。
+  if (!cur || cur !== first) area.appendChild(await buildRow(cur, {}));
   normalizeSel();
+}
+async function moveHistoryRow(po, setId, delta) {
+  if (!po) return;
+  const rounds = await patientRounds(po);
+  const first = rounds.length ? rounds[0] : null;
+  const cur = await currentRound(rounds);
+  const middle = sortMiddle(po, rounds.filter((s) => s !== first && s !== cur));
+  const i = middle.findIndex((s) => s.id === setId);
+  const j = i + delta;
+  if (i < 0 || j < 0 || j >= middle.length) return;
+  const tmp = middle[i]; middle[i] = middle[j]; middle[j] = tmp;
+  saveOrder(po, middle.map((s) => s.id));
+  await renderShoot();
 }
 function mkFrame(row, dir, photo, settled) {
   const f = document.createElement("button");
   f.className = "frame";
-  f.dataset.row = row.kind + ":" + (row.setId || "draft");
-  f.dataset.kind = row.kind;
+  f.dataset.row = "round:" + (row.setId || "draft");
   f.dataset.setid = row.setId || "";
   f.dataset.dir = dir;
   f.dataset.photoid = photo ? photo.id : "";
@@ -330,41 +359,6 @@ function mkFrame(row, dir, photo, settled) {
   } else f.textContent = DIR_JA[dir];
   f.onclick = () => selectFrame(f);
   return f;
-}
-function mkChoiceFrame(dir) {
-  const f = document.createElement("button");
-  f.className = "frame";
-  f.dataset.row = "before:" + (group.beforeId || "draft");
-  f.dataset.choice = "1";
-  f.dataset.dir = dir;
-  f.dataset.photoid = "";
-  f.dataset.filled = "0";
-  const cs = (choiceSel && choiceSel.dir === dir && choiceSel.beforeId === group.beforeId) ? choiceSel : null;
-  f.dataset.kind = cs && cs.kind ? cs.kind : "choice";
-  f.dataset.setid = cs && cs.setId ? cs.setId : "";
-  f.textContent = cs && cs.kind ? (cs.kind === "before" ? "取り直し" : "アフター") : "＋";
-  f.onclick = () => selectFrame(f);
-  return f;
-}
-async function resolveAfterTarget() {
-  if (!group.beforeId) return null;
-  const afters = (await DB.all("sets")).filter((x) => x.baseSetId === group.beforeId).sort((a, b) => b.createdAt - a.createdAt);
-  if (!afters.length) return null;
-  const latest = afters[0];
-  const d = new Date(latest.createdAt), now = new Date();
-  const sameDay = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
-  return sameDay ? latest.id : null;
-}
-async function pickChoice(kind) {
-  const dir = choiceOpenDir;
-  if (!dir) return;
-  let setId = null;
-  if (kind === "before") setId = group.beforeId;
-  else setId = await resolveAfterTarget();
-  choiceSel = { dir, kind, setId, beforeId: group.beforeId };
-  choiceOpenDir = null;
-  sel = { key: "before:" + (group.beforeId || "draft"), kind, setId, dir, photoId: null, choice: true };
-  await renderShoot();
 }
 async function setChosen(setId, dir, photoId) {
   const photos = await DB.bySet(setId);
@@ -386,10 +380,23 @@ async function confirmDir(setId, dir) {
   await renderShoot();
   await renderList();
 }
-async function beginSingle(kind, setId, dir) {
+async function prevRoundPhotos(targetSet, po) {
+  const rounds = await patientRounds(po);
+  let prev = null;
+  for (const s of rounds) {
+    if (targetSet && s.id === targetSet.id) continue;
+    if (targetSet && s.createdAt >= targetSet.createdAt) continue;
+    prev = s;
+  }
+  if (!prev) return null;
+  const chosen = pickChosen(await DB.bySet(prev.id));
+  const map = {};
+  for (const p of chosen) map[p.dir] = p;
+  return Object.keys(map).length ? map : null;
+}
+async function beginSingle(setId, dir) {
   if (!PERMS.cam) { toast("先に権限を取ってください"); return; }
-  if (kind === "after" && !group.beforeId) { toast("先にビフォーを撮ってください"); return; }
-  if (kind === "before" && !setId) {
+  if (!setId) {
     const nm = $("reg-name").value.trim(), cn = $("reg-chart").value.trim();
     if (nm && cn) await registerPatient();
     if (currentPatient) {
@@ -397,15 +404,17 @@ async function beginSingle(kind, setId, dir) {
     }
     if (!group.patientObj) { toast("患者が決まっていません"); return; }
   }
-  S.mode = kind; S.single = { kind, setId: setId || null, dir };
-  S.landmarks = null; S.basePhotos = {};
-  if (kind === "after" && group.beforeId) {
-    const ps = await DB.bySet(group.beforeId);
-    for (const p of ps) S.basePhotos[p.dir] = p;
+  const po = group.patientObj || (currentPatient ? { id: currentPatient.id, name: currentPatient.name, chartNo: currentPatient.chartNo || "" } : null);
+  const targetSet = setId ? await DB.get("sets", setId) : null;
+  S.mode = "round"; S.single = { setId: setId || null, dir };
+  S.landmarks = null; S.basePhotos = {}; S.baseWanted = false;
+  if (po) {
+    const map = await prevRoundPhotos(targetSet, po);
+    if (map) { S.basePhotos = map; S.baseWanted = true; }
   }
   $("page-top").hidden = true; $("page-detail").hidden = true;
   $("cam-wrap").hidden = false;
-  $("cam-dir").textContent = DIR_JA[dir] + (kind === "after" ? "（アフター）" : "（ビフォー）");
+  $("cam-dir").textContent = DIR_JA[dir];
   $("btn-cam-skip").style.display = "none";
   $("btn-cam-finish").style.display = "none";
   try {
@@ -431,11 +440,11 @@ async function saveSingleShot(shot) {
       patientId: po.id || null,
       patient: po.name || "（名前なし）",
       chartNo: po.chartNo || "",
-      kind: sg.kind,
-      baseSetId: sg.kind === "after" ? group.beforeId : null,
+      kind: "round",
+      baseSetId: null,
       createdAt: Date.now(), appVersion: APP_VERSION
     });
-    if (sg.kind === "before") { group.beforeId = setId; saveGroupRef(); }
+    group.roundId = setId; saveGroupRef();
   }
   const olds = (await DB.bySet(setId)).filter((p) => p.dir === shot.dir);
   for (const o of olds) if (o.chosen) { o.chosen = false; await DB.put("photos", o); }
@@ -451,8 +460,7 @@ async function saveSingleShot(shot) {
   });
   if (!contour) toast("保存しました（輪郭は取れませんでした）", 4000);
   else toast("保存しました");
-  choiceSel = null; choiceOpenDir = null;
-  sel = { key: sg.kind + ":" + setId, kind: sg.kind, setId, dir: shot.dir, photoId };
+  sel = { key: "round:" + setId, setId, dir: shot.dir, photoId };
   await renderShoot();
   await renderList();
 }
@@ -927,7 +935,7 @@ function drawLoop() {
     }
   }
 
-  const base = S.mode === "after" ? S.basePhotos[curDir()] : null;
+  const base = S.basePhotos[curDir()] || null;
   if (base && base.contour && base.contour.length > 2) {
     const bw = base.w || vw, bh = base.h || vh;
     const t2 = coverTransform(bw, bh, cw, ch);
@@ -943,8 +951,8 @@ function drawLoop() {
 
   const t = tiltDeg(orient);
   let info = "傾き " + (t == null ? "—" : t.toFixed(1) + "°") + (aiState ? "　" + aiState : "");
-  // アフター撮影で、その方向のビフォー輪郭が無い時は画面に出す（黙って何も出ない形にしない）。
-  if (S.mode === "after") {
+  // 前回がある撮影で、その方向の前回の輪郭が無い時は画面に出す（黙って何も出ない形にしない）。
+  if (S.single && S.baseWanted) {
     const bp = S.basePhotos[curDir()];
     if (!bp || !bp.contour) info += "　輪郭なし";
   }
@@ -1075,27 +1083,14 @@ async function renderList() {
   const sets = (await DB.all("sets")).sort((a, b) => b.createdAt - a.createdAt);
   const box = $("set-list"); box.innerHTML = "";
   $("list-empty").style.display = sets.length ? "none" : "";
-  const area = $("after-area"); area.innerHTML = "";
   for (const s of sets) {
     const d = new Date(s.createdAt);
     const when = (d.getMonth() + 1) + "/" + d.getDate() + " " + String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
     const b = document.createElement("button");
     b.className = "set-item";
-    b.innerHTML = "<b>" + escapeHtml(s.patient) + "</b>" + (s.chartNo ? "　<span class='muted'>No." + escapeHtml(s.chartNo) + "</span>" : "") + "　<span class='tag'>" + (s.kind === "before" ? "ビフォー" : "アフター") + "</span>　<span class='muted'>" + when + "</span>";
+    b.innerHTML = "<b>" + escapeHtml(s.patient) + "</b>" + (s.chartNo ? "　<span class='muted'>No." + escapeHtml(s.chartNo) + "</span>" : "") + "　<span class='muted'>" + when + "</span>";
     b.onclick = () => openDetail(s.id);
     box.appendChild(b);
-    if (s.kind === "before") {
-      const ab = document.createElement("button");
-      ab.textContent = "アフターを撮る（" + s.patient + "）";
-      ab.disabled = !PERMS.cam;
-      ab.onclick = async () => {
-        group = { started: true, beforeId: s.id, patientObj: { id: s.patientId, name: s.patient, chartNo: s.chartNo || "" } };
-        saveGroupRef();
-        await renderShoot();
-        $("shoot-area").scrollIntoView({ behavior: "smooth", block: "start" });
-      };
-      area.appendChild(ab);
-    }
   }
 }
 // 傾きから90°の倍数を差し引いて、-45〜45°に収めた値を返す（V20）。
@@ -1210,7 +1205,7 @@ function downloadBlob(blob, name) {
 }
 function fileBase() {
   const d = new Date(currentSet.createdAt);
-  return "posture_" + d.getFullYear() + String(d.getMonth() + 1).padStart(2, "0") + String(d.getDate()).padStart(2, "0") + "_" + currentSet.kind;
+  return "posture_" + d.getFullYear() + String(d.getMonth() + 1).padStart(2, "0") + String(d.getDate()).padStart(2, "0") + "_" + String(d.getHours()).padStart(2, "0") + String(d.getMinutes()).padStart(2, "0");
 }
 // 複数枚ある面は、本命（chosen）の1枚だけを返す。無ければ最新の1枚。
 function pickChosen(list) {
@@ -1299,40 +1294,43 @@ async function openDetail(setId) {
   currentPhotos = pickChosen(await DB.bySet(setId)).sort((a, b) => DIRS.indexOf(a.dir) - DIRS.indexOf(b.dir));
   $("page-top").hidden = true;
   $("page-detail").hidden = false;
-  $("detail-title").textContent = currentSet.patient + (currentSet.chartNo ? "（No." + currentSet.chartNo + "）" : "") + "（" + (currentSet.kind === "before" ? "ビフォー" : "アフター") + "）";
+  $("detail-title").textContent = currentSet.patient + (currentSet.chartNo ? "（No." + currentSet.chartNo + "）" : "") + "（" + fmtWhen(currentSet.createdAt) + "）";
 
   $("btn-lm").textContent = showLm ? "ポイント・ラインを消す" : "ポイント・ラインを表示";
   const note = $("pitch-note");
   note.hidden = true;
-  if (currentSet.kind === "after" && currentSet.baseSetId) {
-    const basePhotos = await DB.bySet(currentSet.baseSetId);
-    const diffs = currentPhotos.filter((p) => {
-      const b = basePhotos.find((x) => x.dir === p.dir);
-      return b && p.pitch != null && b.pitch != null && Math.abs(p.pitch - b.pitch) >= 5;
-    }).map((p) => DIR_JA[p.dir]);
-    if (diffs.length) {
-      note.textContent = "注意：上下の傾きがビフォーと違う写真があります（" + diffs.join("、") + "）";
-      note.hidden = false;
+  {
+    const poN = { id: currentSet.patientId, name: currentSet.patient, chartNo: currentSet.chartNo || "" };
+    const prevsN = (await patientRounds(poN)).filter((s) => s.createdAt < currentSet.createdAt);
+    if (prevsN.length) {
+      const basePhotos = await DB.bySet(prevsN[prevsN.length - 1].id);
+      const diffs = currentPhotos.filter((p) => {
+        const b = basePhotos.find((x) => x.dir === p.dir);
+        return b && p.pitch != null && b.pitch != null && Math.abs(p.pitch - b.pitch) >= 5;
+      }).map((p) => DIR_JA[p.dir]);
+      if (diffs.length) {
+        note.textContent = "注意：上下の傾きが前回と違う写真があります（" + diffs.join("、") + "）";
+        note.hidden = false;
+      }
     }
   }
 
   // 対のセット（ビフォー⇔アフター）があれば、方向ごとに左右に並べて見せる（V18）。
   // V19: 並べる時は、輪郭から人の高さと頭の位置を左右で揃える。
   let pairSet = null, pairPhotos = [];
-  if (currentSet.kind === "after" && currentSet.baseSetId) {
-    pairSet = await DB.get("sets", currentSet.baseSetId);
-  } else if (currentSet.kind === "before") {
-    const cands = (await DB.all("sets")).filter((s) => s.baseSetId === currentSet.id).sort((a, b) => b.createdAt - a.createdAt);
-    if (cands.length) pairSet = cands[0];
+  {
+    const poP = { id: currentSet.patientId, name: currentSet.patient, chartNo: currentSet.chartNo || "" };
+    const prevsP = (await patientRounds(poP)).filter((s) => s.createdAt < currentSet.createdAt);
+    if (prevsP.length) pairSet = prevsP[prevsP.length - 1];
   }
   if (pairSet) {
     pairPhotos = pickChosen(await DB.bySet(pairSet.id)).sort((a, b) => DIRS.indexOf(a.dir) - DIRS.indexOf(b.dir));
-    $("detail-title").textContent = currentSet.patient + (currentSet.chartNo ? "（No." + currentSet.chartNo + "）" : "") + "（ビフォーとアフター）";
+    $("detail-title").textContent = currentSet.patient + (currentSet.chartNo ? "（No." + currentSet.chartNo + "）" : "") + "（前回と今回）";
   }
-  const beforePhotos = currentSet.kind === "before" ? currentPhotos : pairPhotos;
-  const afterPhotos = currentSet.kind === "after" ? currentPhotos : pairPhotos;
-  const beforeSet = currentSet.kind === "before" ? currentSet : pairSet;
-  const afterSet = currentSet.kind === "after" ? currentSet : pairSet;
+  const beforePhotos = pairPhotos;
+  const afterPhotos = currentPhotos;
+  const beforeSet = pairSet;
+  const afterSet = currentSet;
 
   const box = $("detail-thumbs"); box.innerHTML = "";
 
@@ -1344,10 +1342,10 @@ async function openDetail(setId) {
     const p = entry.p;
     const fig = document.createElement("figure");
     const cap = document.createElement("figcaption");
-    cap.textContent = (pairSet ? (entry.kind === "before" ? "ビフォー　" : "アフター　") : "") +
+    cap.textContent = (pairSet ? fmtWhen(entry.set.createdAt) + "　" : "") +
       DIR_JA[p.dir] + "　傾き " + (p.tilt == null ? "—" : p.tilt.toFixed(1) + "°") +
       "　上下 " + (p.pitch == null ? "—" : p.pitch.toFixed(1) + "°") +
-      (entry.kind === "before" ? (p.contour ? "　輪郭あり" : "　輪郭なし") : "");
+      (p.contour ? "　輪郭あり" : "　輪郭なし");
     fig.appendChild(cap);
     const dl = document.createElement("button");
     dl.className = "sub"; dl.textContent = "書き出す（補正済み）";
@@ -1413,16 +1411,15 @@ async function openDetail(setId) {
   if (!pairSet) {
     for (const p of currentPhotos) addSingle({ p, kind: currentSet.kind, set: currentSet });
   } else if (detailMode === "sets") {
-    const afterSets = (await DB.all("sets")).filter((x) => x.baseSetId === beforeSet.id).sort((a, b) => a.createdAt - b.createdAt);
-    const groups = [{ set: beforeSet, kind: "before" }];
-    for (const as of afterSets) groups.push({ set: as, kind: "after" });
+    const poG = { id: currentSet.patientId, name: currentSet.patient, chartNo: currentSet.chartNo || "" };
+    const groups = (await patientRounds(poG)).map((s) => ({ set: s, kind: "round" }));
     for (const g of groups) {
       const photos = pickChosen(await DB.bySet(g.set.id)).sort((a, b) => DIRS.indexOf(a.dir) - DIRS.indexOf(b.dir));
       if (!photos.length) continue;
       const lab = document.createElement("div");
       lab.className = "set-group-label";
       const gd = new Date(g.set.createdAt);
-      lab.textContent = (g.kind === "before" ? "ビフォー" : "アフター") + "　" + (gd.getMonth() + 1) + "/" + gd.getDate() + " " + String(gd.getHours()).padStart(2, "0") + ":" + String(gd.getMinutes()).padStart(2, "0");
+      lab.textContent = (gd.getMonth() + 1) + "/" + gd.getDate() + " " + String(gd.getHours()).padStart(2, "0") + ":" + String(gd.getMinutes()).padStart(2, "0");
       box.appendChild(lab);
       const grid = document.createElement("div");
       grid.className = "thumbs";
@@ -1473,8 +1470,7 @@ $("btn-ocr").onclick = async () => {
 };
 $("btn-start-before").onclick = async () => {
   const ce = $("cam-err"); if (ce) ce.textContent = "";
-  if (sel.choice && sel.kind === "choice") { toast("ビフォー取り直しかアフターを選んでください"); return; }
-  await beginSingle(sel.kind, sel.setId, sel.dir);
+  await beginSingle(sel.setId, sel.dir);
 };
 $("shutter").onclick = takePhoto;
 $("btn-cam-cancel").onclick = cancelShoot;
